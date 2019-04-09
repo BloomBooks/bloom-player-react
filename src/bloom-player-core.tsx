@@ -122,10 +122,14 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
                     const landscape = this.forceDevicePageSize(page);
                     // Now we have all the information we need to call reportBookProps if it is set.
                     if (i === 0 && this.props.reportBookProperties) {
+                        // old...only useful when not in iframe
                         this.props.reportBookProperties({
                             landscape,
                             canRotate: this.canRotate
                         });
+                        if (window.parent) {
+                            window.parent.postMessage({landscape, canRotate: this.canRotate}, "*");
+                        }
                     }
 
                     this.fixRelativeUrls(page);
