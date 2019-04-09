@@ -1,7 +1,16 @@
 ## Introduction
-bloom-player is designed to play Bloom books, specifically unzipped .bloomd books such as Bloom creates for BloomReader.
 
-You should make a very simple html document, similar to test/testPage.htm, and make it the root document of an iframe or WebView. The src url for the iframe or WebView must specify a parameter in addition to the document, which must give the url of the folder where the bloom book can be found.
+bloom-player lets you interact with [Bloom](bloomlibrary.org) books that have been prepared for electronic publication. For example, the contents of a .bloomd (bloom-player cannot unzip .bloomd's).
+
+To use bloomplayer.js,
+
+    1. get bloomplayer.htm and bloomplayer.js into your project.
+
+    2. in an iframe or webview navigate to it with a url that tells it where to find the book's html. Example:
+
+    file:///C:\github\bloom-player\dist\bloomplayer.htm?url=https://s3.amazonaws.com/BloomLibraryBooks-Sandbox/ken@example.com/aa5b9928-d38b-44ca-b013-512c57fd5094/(35a)+Share+It+Fair
+
+## Introduction
 
 The display of the book will automatically grow to be as large as will fit in the given space. If the book can rotate, it will pick an orientation depending on whether the window is wider then it is tall. If the book has special behaviors, such as motion/animation when in landscape mode, they will be triggered based on the chosen orientation.
 
