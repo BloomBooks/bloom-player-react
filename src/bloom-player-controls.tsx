@@ -1,5 +1,5 @@
-/* 
-bloom-player-preview wraps bloom-player-core and adds just enough controls to preview the 
+/*
+bloom-player-preview wraps bloom-player-core and adds just enough controls to preview the
 book inside of the Bloom:Publish:Android screen.
 */
 import * as React from "react";
@@ -33,14 +33,15 @@ export class BloomPlayerControls extends React.Component<
     private bloomPlayer: BloomPlayerCore | null;
 
     public render() {
+        const { url, showContextPages } = this.props;
         return (
             <div
                 {...this.props} // Allow all standard div props
             >
                 <BloomPlayerCore
-                    url={this.props.url}
+                    url={url}
                     landscape={this.state.windowLandscape}
-                    showContextPages={this.props.showContextPages}
+                    showContextPages={showContextPages}
                     paused={this.state.paused}
                     reportBookProperties={bookProps=>this.setBookProps(bookProps)}
                     ref = {bloomPlayer => this.bloomPlayer = bloomPlayer}
