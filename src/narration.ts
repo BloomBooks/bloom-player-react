@@ -20,11 +20,12 @@ export default class Narration {
 
     private segments: HTMLElement[];
 
-    // The first one to play should be at the end for both of these
     private nextElementIdToPlay: string;
-    private elementsToPlayConsecutivelyStack: HTMLElement[];
-    private endTimesInSecsStack: number[];
-    private elementsToHighlightStack: Element[];
+
+    // The first one to play should be at the end for all of these
+    private elementsToPlayConsecutivelyStack: HTMLElement[];    // The audio-sentence elements (ie those with actual audio files associated with them) that should play one after the other
+    private elementsToHighlightStack: Element[];    // The elements to highlight while the audio is playing. (If a text box's audio has been split, this may be the descendant sentence spans rather than the actual audio element)
+    private endTimesInSecsStack: number[];  // The end times corresponding to each of the elements in elementsToHighlight stack
 
     public PageNarrationComplete: LiteEvent<HTMLElement>;
     public PageDurationAvailable: LiteEvent<HTMLElement>;
@@ -91,6 +92,10 @@ export default class Narration {
                             this.elementsToHighlightStack.push(childSpanElements.item(i));
                         }
                     }
+                } else {
+                    // No timings string available.
+                    // No need for us to do anything. The correct element is already highlighted by playAllSentences() (which needed to call setCurrent... anyway to set the audio player source).
+                    // We'll just proceed along, start playing the audio, and playNextSubElement() will return immediately because there are no sub-elements in this case.
                 }
 
                 const promise = mediaPlayer.play();
@@ -106,16 +111,11 @@ export default class Narration {
                     promise.catch((reason: any) => {
                         console.log("could not play sound: " + reason);
 
-                        // REVIEW: Don't think the following code is needed?
-                        // If the promise fails, shouldn't the error handler go at it?
-                        // Well, definitely don't want removeAudioCurrent(). That'll mess up the playEnded() call.
-                        // Maybe pausing it isn't a terrible idea.
-
+                        // Don't want removeAudioCurrent(). That'll mess up the playEnded() call.
                         // this.removeAudioCurrent();
                         // With some kinds of invalid sound file it keeps trying and plays over and over.
 
-                        // REVIEW: I don't think this line actually helps anything, so I commented it out.
-                        // this.getPlayer().pause();
+                         this.getPlayer().pause();
                         // if (this.Pause) {
                         //     this.Pause.raise();
                         // }
@@ -143,14 +143,10 @@ export default class Narration {
         const mediaPlayer: HTMLMediaElement = (document.getElementById("bloom-audio-player")! as HTMLMediaElement);
         currentTimeInSecs = mediaPlayer.currentTime;
 
-        let durationInSecs = endTimeInSecs - currentTimeInSecs;
-
         // Handle cases where the currentTime has already exceeded the nextStartTime
         //   (might happen if you're unlucky in the thread queue... or if in debugger, etc.)
-        const minHighlightThresholdInSecs = 0.1;
-        if (durationInSecs <= minHighlightThresholdInSecs) {
-            durationInSecs = minHighlightThresholdInSecs;
-        }
+        // But instead of setting time to 0, set the minimum highlight time threshold to 0.1 (this threshold is arbitrary).
+        const durationInSecs = Math.max(endTimeInSecs - currentTimeInSecs, 0.1);
 
         setTimeout(() => {
             this.playSubElementEnded();
@@ -251,12 +247,12 @@ export default class Narration {
     }
 
     // Setter for idOfNextElementToPlay
-    public setNextElementIdToPlay(id: string, isUpdateAudioPlayerOn: boolean) {
+    public setNextElementIdToPlay(id: string, updateAudioPlayer: boolean) {
         if (!this.nextElementIdToPlay || this.nextElementIdToPlay != id) {
             this.nextElementIdToPlay = id;
 
-            if (isUpdateAudioPlayerOn) {
-                this.updatePlayerStatus(); // May be redundant sometimes, but safer to trigger player update whenever the next element changes.
+            if (updateAudioPlayer) {
+                this.updatePlayerStatus(); // Assuming updateAudioPlayer=true, may sometimes be redundant, but still safer to trigger player update
             }
         }
     }
@@ -280,8 +276,6 @@ export default class Narration {
     }
 
     private getPlayer(): HTMLMediaElement {
-        // REVIEW: Should we cache this? is it weird to have this event handler multiple times?
-
         return this.getAudio("bloom-audio-player", audio => {
             // if we just pass the function, it has the wrong "this"
             audio.addEventListener("ended", () => this.playEnded());
