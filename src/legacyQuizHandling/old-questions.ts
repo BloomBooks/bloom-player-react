@@ -26,6 +26,8 @@ export class OldQuestionsConverter {
 
             const marginBox = this.appendElementWithClass("div", "marginBox", page);
             const quiz = this.appendElementWithClass("div", "quiz", marginBox);
+            const header = this.appendElementWithClass("h1", "", quiz);
+            header.innerText = "Check Your Understanding";
             const group =this.appendElementWithClass("div", "bloom-translationGroup", quiz);
             const editable = this.appendElementWithClass("div", "bloom-editable", group);
             editable.classList.add("bloom-content1");
