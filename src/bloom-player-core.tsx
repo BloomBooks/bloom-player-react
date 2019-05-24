@@ -18,6 +18,8 @@ import { Animation } from "./animation";
 import { Video } from "./video";
 import { BloomPlayerControls } from "./bloom-player-controls";
 import { OldQuestionsConverter } from "./legacyQuizHandling/old-questions";
+import { LocalizationManager } from "./l10n/localizationManager";
+import { LocalizationUtils } from "./l10n/localizationUtils";
 
 // BloomPlayer takes a URL param that directs it to Bloom book.
 // (See comment on sourceUrl for exactly how.)
@@ -86,6 +88,8 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
     // We expect it to show some kind of loading indicator on initial render, then
     // we do this work. For now, won't get a loading indicator if you change the url prop.
     public componentDidUpdate(prevProps: IProps) {
+        LocalizationManager.setUp();
+
         if (!this.video) {
             this.video = new Video();
         }
@@ -209,7 +213,15 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
                     }
 
                     this.assembleStyleSheets(bookHtmlElement);
-                    this.setState({ pages: sliderContent });
+                    this.setState({ pages: sliderContent }, () => {
+                        LocalizationManager.localize(
+                            document.body,
+                            LocalizationUtils.getPreferredBookLanguages(
+                                body as HTMLBodyElement
+                            )
+                        );
+                    });
+
                     // A pause hopefully allows the document to become visible before we
                     // start playing any audio or movement on the first page.
                     // Also gives time for the first page
