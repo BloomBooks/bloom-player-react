@@ -42,6 +42,9 @@ export class OldQuestionsConverter {
                     "quiz",
                     marginBox
                 );
+                const header = this.appendElementWithClass("h1", "", quiz);
+                header.setAttribute("data-i18n", "Quiz.CheckYourUnderstanding");
+                header.innerText = "Check Your Understanding";
                 const group = this.appendElementWithClass(
                     "div",
                     "bloom-translationGroup",

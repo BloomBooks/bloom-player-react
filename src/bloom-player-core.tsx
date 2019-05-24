@@ -18,6 +18,7 @@ import { Animation } from "./animation";
 import { Video } from "./video";
 import { BloomPlayerControls } from "./bloom-player-controls";
 import { OldQuestionsConverter } from "./legacyQuizHandling/old-questions";
+import { LocalizationManager } from "./l10n/localizationManager";
 
 // BloomPlayer takes a URL param that directs it to Bloom book.
 // (See comment on sourceUrl for exactly how.)
@@ -209,7 +210,10 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
                     }
 
                     this.assembleStyleSheets(bookHtmlElement);
-                    this.setState({ pages: sliderContent });
+                    this.setState({ pages: sliderContent }, () => {
+                        LocalizationManager.localize(document.body);
+                    });
+
                     // A pause hopefully allows the document to become visible before we
                     // start playing any audio or movement on the first page.
                     // Also gives time for the first page
