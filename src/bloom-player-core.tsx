@@ -18,6 +18,8 @@ import { Animation } from "./animation";
 import { Video } from "./video";
 import { BloomPlayerControls } from "./bloom-player-controls";
 import { OldQuestionsConverter } from "./legacyQuizHandling/old-questions";
+import { LocalizationManager } from "./l10n/localizationManager";
+import { LocalizationUtils } from "./l10n/localizationUtils";
 
 // BloomPlayer takes a URL param that directs it to Bloom book.
 // (See comment on sourceUrl for exactly how.)
@@ -72,6 +74,8 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
     // The folder containing the html file.
     private urlPrefix: string;
 
+    private preferredBookLanguages;
+
     private narration: Narration;
     private animation: Animation;
     private video: Video;
@@ -80,12 +84,21 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
     private static currentPage: HTMLElement;
 
     public componentDidMount() {
-        this.componentDidUpdate(this.props);
+        LocalizationManager.setUp();
+        this.componentDidUpdate(this.props, this.state);
     }
 
     // We expect it to show some kind of loading indicator on initial render, then
     // we do this work. For now, won't get a loading indicator if you change the url prop.
-    public componentDidUpdate(prevProps: IProps) {
+    public componentDidUpdate(prevProps: IProps, prevState: IState) {
+        // We want to localize once and only once after pages has been set
+        if (prevState.pages !== this.state.pages) {
+            LocalizationManager.localizePages(
+                document.body,
+                this.preferredBookLanguages
+            );
+        }
+
         if (!this.video) {
             this.video = new Video();
         }
@@ -164,6 +177,9 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
                 const bookHtmlElement = bookDoc.documentElement as HTMLHtmlElement;
 
                 const body = bookHtmlElement.getElementsByTagName("body")[0];
+                this.preferredBookLanguages = LocalizationUtils.getPreferredBookLanguages(
+                    body as HTMLBodyElement
+                );
                 this.canRotate = body.hasAttribute("data-bfcanrotate"); // expect value allOrientations;bloomReader, should we check?
 
                 this.makeNonEditable(body);
@@ -210,6 +226,7 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
 
                     this.assembleStyleSheets(bookHtmlElement);
                     this.setState({ pages: sliderContent });
+
                     // A pause hopefully allows the document to become visible before we
                     // start playing any audio or movement on the first page.
                     // Also gives time for the first page
