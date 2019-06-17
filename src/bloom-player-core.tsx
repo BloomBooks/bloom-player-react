@@ -20,6 +20,7 @@ import { BloomPlayerControls } from "./bloom-player-controls";
 import { OldQuestionsConverter } from "./legacyQuizHandling/old-questions";
 import { LocalizationManager } from "./l10n/localizationManager";
 import { LocalizationUtils } from "./l10n/localizationUtils";
+import { reportBookStats, reportPageShown } from "./externalContext";
 
 // BloomPlayer takes a URL param that directs it to Bloom book.
 // (See comment on sourceUrl for exactly how.)
@@ -89,6 +90,8 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
     private isPagesLocalized: boolean = false;
 
     private static currentPage: HTMLElement;
+
+    private indexOfLastNumberedPage: number;
 
     public componentDidMount() {
         LocalizationManager.setUp();
@@ -208,6 +211,8 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
                     if (this.props.showContextPages) {
                         sliderContent.push(""); // blank page to fill the space left of first.
                     }
+                    let countOfNumberedPages = 0;
+                    let countOfQuestionPages = 0;
                     for (let i = 0; i < pages.length; i++) {
                         const page = pages[i];
                         const landscape = this.forceDevicePageSize(page);
@@ -230,11 +235,36 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
 
                         this.fixRelativeUrls(page);
 
+                        // possibly more efficient to look for attribute data-page-number,
+                        // but due to a bug (BL-7303) many published books may have that on back-matter pages.
+                        const hasPageNum = page.classList.contains(
+                            "numberedPage"
+                        );
+                        if (hasPageNum) {
+                            this.indexOfLastNumberedPage =
+                                i + (this.props.showContextPages ? 1 : 0);
+                            countOfNumberedPages++;
+                        }
+                        if (
+                            page.getAttribute("data-analyticscategories") ===
+                            "comprehension"
+                        ) {
+                            // Note that this will count both new-style question pages,
+                            // and ones generated from old-style json.
+                            countOfQuestionPages++;
+                        }
+
                         sliderContent.push(page.outerHTML);
                     }
                     if (this.props.showContextPages) {
                         sliderContent.push(""); // blank page to fill the space right of last.
                     }
+
+                    reportBookStats({
+                        totalNumberedPages: countOfNumberedPages,
+                        contentLang: this.bookLanguage1!,
+                        questionCount: countOfQuestionPages
+                    });
 
                     this.assembleStyleSheets(bookHtmlElement);
                     this.setState({ pages: sliderContent });
@@ -693,7 +723,7 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
         // When we have computed it, this will raise PageDurationComplete,
         // which calls an animation method to start the image animation.
         this.narration.computeDuration(bloomPage);
-        this.narration.playAllSentences(bloomPage);
+        const pageHasAudio = this.narration.playAllSentences(bloomPage);
         if (this.props.pageSelected) {
             this.props.pageSelected(sliderPage);
         }
@@ -702,5 +732,7 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
         }
         this.video.HandlePageVisible(bloomPage);
         this.animation.HandlePageVisible(bloomPage);
+
+        reportPageShown(pageHasAudio, index === this.indexOfLastNumberedPage);
     }
 }
