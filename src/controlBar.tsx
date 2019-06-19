@@ -31,6 +31,9 @@ import PlayCircleOutline from "@material-ui/icons/PlayCircleOutline";
 //tslint:disable-next-line:no-submodule-imports
 import PauseCircleOutline from "@material-ui/icons/PauseCircleOutline";
 
+import { useTheme } from "@material-ui/styles";
+import { Theme } from "@material-ui/core";
+
 // react control (using hooks) for the bar of controls across the top of a bloom-player-controls
 
 interface IControlBarProps {
@@ -39,8 +42,9 @@ interface IControlBarProps {
     backClicked?: () => void;
 }
 
-export const ControlBar: React.SFC<IControlBarProps> = props => {
+export const ControlBar: React.FunctionComponent<IControlBarProps> = props => {
     const [canGoBack, setCanGoBack] = useState(false);
+
     useEffect(() => {
         requestCapabilities(data => {
             if (data.canGoBack) {
@@ -48,9 +52,17 @@ export const ControlBar: React.SFC<IControlBarProps> = props => {
             }
         });
     }, []);
+
+    const theme: Theme = useTheme();
+
     return (
         <div>
-            <AppBar className="control-bar" id="control-bar" elevation={0}>
+            <AppBar
+                style={{ color: theme.palette.primary.dark }}
+                className="control-bar"
+                id="control-bar"
+                elevation={0}
+            >
                 <Toolbar>
                     {!canGoBack || (
                         <IconButton
@@ -67,6 +79,7 @@ export const ControlBar: React.SFC<IControlBarProps> = props => {
                         className="filler" // this is set to flex-grow, making the following icons right-aligned.
                     />
                     <IconButton
+                        style={{ color: theme.palette.primary.contrastText }}
                         onClick={() => {
                             if (props.pausedChanged) {
                                 props.pausedChanged(!props.paused);
