@@ -34,7 +34,7 @@ export default class Narration {
     public PageDuration: number;
 
     // Roughly equivalent to BloomDesktop's AudioRecording::listen() function.
-    // Return true if page has audio
+    // Return true if playing audio for page (means both it has audio, and we're not paused)
     public playAllSentences(page: HTMLElement): boolean {
         this.playerPage = page;
 
@@ -54,7 +54,7 @@ export default class Narration {
 
         this.setSoundAndHighlight(firstElementToPlay, true);
         this.playCurrentInternal();
-        return true;
+        return !this.paused;
     }
 
     private playCurrentInternal() {
