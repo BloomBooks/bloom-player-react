@@ -354,6 +354,21 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
                 this.narration.pause();
                 this.video.pause();
             } else {
+                // This test determines if we changed pages while paused,
+                // since the narration object won't yet be updated.
+                if (BloomPlayerCore.currentPage !== this.narration.playerPage) {
+                    const {
+                        slider: sliderPage,
+                        page: dummy
+                    } = this.getPageAtSliderIndex(
+                        this.state.currentSliderIndex
+                    );
+
+                    this.resetForNewPage(
+                        BloomPlayerCore.currentPage,
+                        sliderPage
+                    );
+                }
                 this.narration.play();
                 this.video.play();
             }
@@ -754,10 +769,25 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
         if (this.canRotate) {
             this.forceDevicePageSize(bloomPage);
         }
+        if (!this.props.paused) {
+            this.resetForNewPage(bloomPage, sliderPage);
+        }
+
+        reportPageShown(
+            this.narration.pageHasAudio(bloomPage),
+            !this.props.paused,
+            index === this.indexOflastNumberedPage
+        );
+    }
+
+    private resetForNewPage(
+        bloomPage: HTMLElement,
+        sliderPage: HTMLElement
+    ): void {
         // When we have computed it, this will raise PageDurationComplete,
         // which calls an animation method to start the image animation.
         this.narration.computeDuration(bloomPage);
-        const audioResult = this.narration.playAllSentences(bloomPage);
+        this.narration.playAllSentences(bloomPage);
         if (this.props.pageSelected) {
             this.props.pageSelected(sliderPage);
         }
@@ -766,11 +796,5 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
         }
         this.video.HandlePageVisible(bloomPage);
         this.animation.HandlePageVisible(bloomPage);
-
-        reportPageShown(
-            audioResult.pageHasAudio,
-            audioResult.audioWillPlay,
-            index === this.indexOflastNumberedPage
-        );
     }
 }
