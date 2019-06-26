@@ -1,4 +1,5 @@
 import LiteEvent from "./event";
+import { reportAudioPlayed } from "./externalContext";
 
 const kSegmentClass = "bloom-highlightSegment";
 const kAudioSentence = "audio-sentence"; // Even though these can now encompass more than strict sentences, we continue to use this class name for backwards compatability reasons
@@ -32,6 +33,8 @@ export default class Narration {
     public PageNarrationComplete: LiteEvent<HTMLElement>;
     public PageDurationAvailable: LiteEvent<HTMLElement>;
     public PageDuration: number;
+
+    private audioPlayStartTime: number; // milliseconds (since 1970/01/01, from new Date().getTime())
 
     // Roughly equivalent to BloomDesktop's AudioRecording::listen() function.
     // Return an object for reporting:
@@ -109,6 +112,7 @@ export default class Narration {
                 }
 
                 const promise = mediaPlayer.play();
+                this.audioPlayStartTime = new Date().getTime();
                 this.highlightNextSubElement();
 
                 // In newer browsers, play() returns a promise which fails
@@ -328,6 +332,12 @@ export default class Narration {
         if (!player) {
             return;
         }
+        // Any time we change the src, the player will pause.
+        // So if we're playing currently, we'd better report whatever time
+        // we played.
+        if (player.currentTime > 0 && !player.paused && !player.ended) {
+            this.reportPlayDuration();
+        }
         player.setAttribute(
             "src",
             this.currentAudioUrl(this.currentAudioId) +
@@ -349,6 +359,7 @@ export default class Narration {
     }
 
     public playEnded(): void {
+        this.reportPlayDuration();
         if (
             this.elementsToPlayConsecutivelyStack &&
             this.elementsToPlayConsecutivelyStack.length > 0
@@ -373,6 +384,12 @@ export default class Narration {
                 }
             }
         }
+    }
+
+    private reportPlayDuration() {
+        const currentTime = new Date().getTime();
+        const duration = (currentTime - this.audioPlayStartTime) / 1000;
+        reportAudioPlayed(duration);
     }
 
     private getAudio(id: string, init: (audio: HTMLAudioElement) => void) {
@@ -448,6 +465,7 @@ export default class Narration {
         if (this.segments.length && this.getPlayer()) {
             if (this.elementsToPlayConsecutivelyStack.length) {
                 this.getPlayer().play();
+                this.audioPlayStartTime = new Date().getTime();
             } else {
                 // Pressing the play button in this case is triggering a replay of the current page,
                 // so we need to reset the highlighting.
@@ -478,8 +496,14 @@ export default class Narration {
         if (this.paused) {
             return;
         }
-        if (this.segments.length && this.getPlayer()) {
-            this.getPlayer().pause();
+        const player = this.getPlayer();
+        if (this.segments.length && player) {
+            // Before reporting duration, try to check that we really are playing.
+            // a separate report is sent if play ends.
+            if (player.currentTime > 0 && !player.paused && !player.ended) {
+                this.reportPlayDuration();
+            }
+            player.pause();
         }
         this.paused = true;
         this.startPause = new Date();
