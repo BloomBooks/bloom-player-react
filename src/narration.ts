@@ -218,7 +218,7 @@ export default class Narration {
         this.highlightNextSubElement();
     }
 
-    // Removes the .ui-audioCurrent class from all elements
+    // Removes the .ui-audioCurrent class from all elements (also bloom-audioCurrentImg)
     // Equivalent of removeAudioCurrentFromPageDocBody() in BloomDesktop.
     private removeAudioCurrent() {
         // Note that HTMLCollectionOf's length can change if you change the number of elements matching the selector.
@@ -231,6 +231,12 @@ export default class Narration {
 
         for (let i = 0; i < audioCurrentArray.length; i++) {
             audioCurrentArray[i].classList.remove("ui-audioCurrent");
+        }
+        const currentImg = document.getElementsByClassName(
+            "bloom-audioCurrentImg"
+        )[0];
+        if (currentImg) {
+            currentImg.classList.remove("bloom-audioCurrentImg");
         }
     }
 
@@ -272,6 +278,10 @@ export default class Narration {
         }
 
         newElement.classList.add("ui-audioCurrent");
+        const imgContainer = newElement.closest(".bloom-imageContainer");
+        if (imgContainer) {
+            imgContainer.classList.add("bloom-audioCurrentImg");
+        }
     }
 
     private setSoundFrom(element: Element) {
