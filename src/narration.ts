@@ -1,5 +1,6 @@
 import LiteEvent from "./event";
 import { reportAudioPlayed } from "./externalContext";
+import { BloomPlayerCore } from "./bloom-player-core";
 
 const kSegmentClass = "bloom-highlightSegment";
 const kAudioSentence = "audio-sentence"; // Even though these can now encompass more than strict sentences, we continue to use this class name for backwards compatability reasons
@@ -410,6 +411,8 @@ export default class Narration {
         const currentTime = new Date().getTime();
         const duration = (currentTime - this.audioPlayStartTime) / 1000;
         reportAudioPlayed(duration);
+        BloomPlayerCore.saveAudioDuration(duration);
+        BloomPlayerCore.noteAudioOnPage();
     }
 
     private getAudio(id: string, init: (audio: HTMLAudioElement) => void) {

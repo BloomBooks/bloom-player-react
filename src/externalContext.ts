@@ -8,6 +8,20 @@ import { TransientPageDataSingleton } from "./transientPageData";
  *       a browser or Bloom Publish preview, there's no one listening and that's fine.
  */
 
+function postMessage(message: string) {
+    // If we're in a native Android WebView or similar, it has to inject
+    // an object called ParentProxy to receive the message.
+    if ((window as any).ParentProxy) {
+        (window as any).ParentProxy.receiveMessage(message);
+        return;
+    }
+    // If we're in an iframe, window.parent is the parent window, which may (but
+    // probably won't) handle the message. If we're in a ReactNative WebView, window.parent
+    // is the WebView itself (same as plain 'window') but the React Native code
+    // receives the message.
+    window.parent.postMessage(message, "*"); // any window may receive
+}
+
 export function getBookParam(paramName: string): string {
     const vars = {}; // deceptive, we don't change the ref, but do change the content
     //  if this runs into edge cases, try an npm library like https://www.npmjs.com/package/qs
@@ -20,24 +34,35 @@ export function getBookParam(paramName: string): string {
 
 // Ask the parent window, if any, to store this key/value pair persistently.
 export function storePageDataExternally(key: string, value: string) {
-    // If we're in an iframe, window.parent is the parent window, which may (but
-    // probably won't) try to store the data. If we're in a WebView, window.parent
-    // is the WebView itself (same as plain 'window') but the React Native code
-    // receives the message.
-    window.parent.postMessage(
-        JSON.stringify({ messageType: "storePageData", key, value }),
-        "*" // any window may receive
-    );
+    postMessage(JSON.stringify({ messageType: "storePageData", key, value }));
+}
+
+let ambientAnalyticsProps = {};
+export function setAmbientAnalytics(params: any) {
+    ambientAnalyticsProps = params;
 }
 
 export function reportAnalytics(event: string, params: any) {
-    // See storePageDataExternally for why we use window.parent here.
-    window.parent.postMessage(
-        JSON.stringify({ messageType: "sendAnalytics", event, params }),
-        "*"
+    postMessage(
+        JSON.stringify({
+            messageType: "sendAnalytics",
+            event,
+            params: { ...ambientAnalyticsProps, ...params }
+        })
     );
 }
 
+export function updateFinishedAnalyticsReport(event: string, params: any) {
+    postMessage(
+        JSON.stringify({
+            messageType: "updateFinishedAnalytics",
+            event,
+            params: { ...ambientAnalyticsProps, ...params }
+        })
+    );
+}
+
+//obsolete (but some clients may still use)
 interface IBookStats {
     totalNumberedPages: number;
     questionCount: number;
@@ -47,11 +72,13 @@ interface IBookStats {
     blind: boolean; // technically, whether it has image descriptions not in xmatter
 }
 
+// obsolete (but some clients may still use)
 export function reportBookStats(stats: IBookStats) {
     const args = { messageType: "bookStats", ...stats };
     postMessageWhenReady(JSON.stringify(args));
 }
 
+// obsolete (but some clients may still use)
 export function reportPageShown(
     pageHasAudio: boolean,
     audioWillPlay: boolean,
@@ -67,6 +94,7 @@ export function reportPageShown(
     );
 }
 
+// obsolete (but some clients may still use)
 export function reportAudioPlayed(
     duration: number // seconds
 ) {
@@ -77,7 +105,7 @@ export function reportAudioPlayed(
         })
     );
 }
-
+// obsolete (but some clients may still use)
 export function reportVideoPlayed(
     duration: number // seconds
 ) {
@@ -100,23 +128,19 @@ let gotCapabilities = false;
 // Note that this mechanism depends on something calling requestCapabilities.
 function postMessageWhenReady(message: string) {
     if (gotCapabilities) {
-        window.parent.postMessage(message, "*");
+        postMessage(message);
     } else {
         pendingMessages.push(message);
     }
 }
 
 export function onBackClicked() {
-    window.parent.postMessage(
-        JSON.stringify({ messageType: "backButtonClicked" }),
-        "*"
-    );
+    postMessage(JSON.stringify({ messageType: "backButtonClicked" }));
 }
 
 export function logError(logMessage: string) {
-    window.postMessage(
-        JSON.stringify({ messageType: "logError", message: logMessage }),
-        "*"
+    postMessage(
+        JSON.stringify({ messageType: "logError", message: logMessage })
     );
 }
 
@@ -124,10 +148,7 @@ let capabilitiesCallback: ((data: any) => void) | null = null;
 
 function requestCapabilitiesOnce(callback: (data: any) => void) {
     capabilitiesCallback = callback;
-    window.parent.postMessage(
-        JSON.stringify({ messageType: "requestCapabilities" }),
-        "*"
-    );
+    postMessage(JSON.stringify({ messageType: "requestCapabilities" }));
 }
 
 // Request the container to report what it's capable of doing.
@@ -158,9 +179,7 @@ export function requestCapabilities(callback: (data: any) => void) {
     const receiveCapabilities = data => {
         if (!gotCapabilities) {
             gotCapabilities = true;
-            pendingMessages.forEach(message =>
-                window.parent.postMessage(message, "*")
-            );
+            pendingMessages.forEach(message => postMessage(message));
             pendingMessages = []; // currently redundant, but they aren't pending any more.
         }
         callback(data);
@@ -177,22 +196,24 @@ export function requestCapabilities(callback: (data: any) => void) {
     timeoutFunc();
 }
 
-// Listen for messages, typically from our parent window, but we're not doing anything security-critical,
-// so no need to worry about origin.
-// Note: it's clear from the documentation and by experiment that when hosted in a web page, we need
-// window.addEventListener. However, for some time the code had document.addEventListener, and this
-// apparently worked in BloomReader-RN. It's just possible we will need to do both when we resume
-// work on that program.
-window.addEventListener("message", data => {
-    // something sends us an empty message, which we haven't figured out, but know we can ignore
-    if (!data || !data.data || data.data.length === 0) {
-        return;
-    }
-    let message: any;
+// This function receives communications from the context outside the BloomPlayer's iframe
+// or WebView. It is intended to be called by a window message listener responding to a postMessage()
+// call from the context. In the case of Android WebView, I can't find any way to invoke postMessage(),
+// so instead, we make this function directly callable as one of the module's exports,
+// and inject a block of Javascript to call it.
+// Note that the data argument here is the actual stringified object we pass to either receiveMessage
+// or postMessage; that makes it the data.data of the window message listener function.
+export function receiveMessage(data: any) {
+    let message: any = null;
     try {
-        message = JSON.parse(data.data);
-    } catch (error) {
-        console.error(error);
+        message = JSON.parse(data);
+    } catch (e) {
+        console.log(
+            "receiveMessage failed to parse json: " +
+                data +
+                " with errror " +
+                e.message
+        );
         return;
     }
     const messageType = message.messageType;
@@ -207,4 +228,19 @@ window.addEventListener("message", data => {
     if (messageType === "capabilities" && capabilitiesCallback) {
         capabilitiesCallback(message);
     }
+}
+
+// Listen for messages, typically from our parent window, but we're not doing anything security-critical,
+// so no need to worry about origin.
+// Note: it's clear from the documentation and by experiment that when hosted in a web page, we need
+// window.addEventListener. However, for some time the code had document.addEventListener, and this
+// apparently worked in BloomReader-RN. It's just possible we will need to do both when we resume
+// work on that program.
+window.addEventListener("message", data => {
+    // something sends us an empty message, which we haven't figured out, but know we can ignore
+    if (!data || !data.data || data.data.length === 0) {
+        console.log("returning early");
+        return;
+    }
+    receiveMessage((data as any).data);
 });

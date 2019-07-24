@@ -1,4 +1,5 @@
 import { reportVideoPlayed } from "./externalContext";
+import { BloomPlayerCore } from "./bloom-player-core";
 
 // class Video contains functionality to get videos to play properly in bloom-player
 
@@ -46,7 +47,7 @@ export class Video {
         this.videoEnded = false;
         this.currentVideoElement.onended = (ev: Event) => {
             this.videoEnded = true;
-            reportVideoPlayed(
+            this.reportVideoPlayed(
                 (ev.target as HTMLVideoElement).currentTime -
                     this.videoStartTime
             );
@@ -112,9 +113,16 @@ export class Video {
             !videoElement.ended
         ) {
             // It's playing, and we're about to stop it...report how long it's been going.
-            reportVideoPlayed(videoElement.currentTime - this.videoStartTime);
+            this.reportVideoPlayed(
+                videoElement.currentTime - this.videoStartTime
+            );
         }
         videoElement.pause();
+    }
+
+    private reportVideoPlayed(duration: number) {
+        reportVideoPlayed(duration);
+        BloomPlayerCore.storeVideoAnalytics(duration);
     }
 
     public hidingPage() {
