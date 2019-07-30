@@ -240,3 +240,12 @@ div.bloom-imageContainer.hidePage {
     z-index: 2000;
     background-color: black; // hide anything not covered by image
 }
+
+// Bloom pages that have only an image do not have the .split-pane and .split-pane-component levels
+// in their markup.  This caused strange behavior in image animation since two copies of the image
+// were showing simultaneously with the animated one underneath and slightly larger.  (A rule in
+// split-pane.css sets the z-index to 1 for most .split-pane > .split-pane-component situations.)
+// See https://issues.bloomlibrary.org/youtrack/issue/BL-7452 for details.
+.customPage > .marginBox > .split-pane-component-inner {
+    z-index: 1;
+}
