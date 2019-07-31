@@ -144,6 +144,12 @@ We just make them follow the main content normally. */
     .slick-prev {
         left: 0;
     }
+    // This is the place to put rules that should only apply in the "device" case,
+    // including the preview inside of Bloom Desktop.
+    // BL-7162 text blocks should be scrollable
+    .bloom-editable.bloom-visibility-code-on {
+        overflow-y: auto !important; // unfortunately this needs !important to override 2 basePage.less rules
+    }
 }
 
 @navigationButtonWidth: 100px;
@@ -165,6 +171,11 @@ We just make them follow the main content normally. */
         // curved on left, flush on right.
         border-radius: @button-radius 0 0 @button-radius;
         left: -1 * @navigationButtonWidth;
+    }
+    // This is a good place to put rules that only cover the web version of bloom-player.
+    // BL-7162 text blocks should be scrollable
+    .bloom-editable.bloom-visibility-code-on {
+        overflow-y: auto;
     }
 }
 
