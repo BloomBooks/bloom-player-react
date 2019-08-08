@@ -6,6 +6,8 @@ export class Music {
     public urlPrefix: string;
     private paused: boolean = false;
     private currentPage: HTMLDivElement;
+    private currentBackgroundAudio: string; // data-backgroundaudio currently playing
+    private currentBackgroundAudioPage: string; // corresponding data-page-number or data-xmatter-page
 
     public static documentHasMusic(): boolean {
         return [].slice
@@ -19,21 +21,26 @@ export class Music {
 
     public HandlePageVisible(bloomPage: HTMLElement) {
         this.currentPage = bloomPage as HTMLDivElement;
-        if (!this.currentPage || !Music.pageHasMusic(this.currentPage)) {
-            return;
-        }
-        this.setMusicSource();
-        if (!this.paused) {
-            this.play();
+        if (this.currentPage && Music.pageHasMusic(this.currentPage)) {
+            this.listen();
         }
     }
 
     public hidingPage() {
-        this.pause();
+        // music continues on the next page by default.
+    }
+
+    private listen() {
+        this.setMusicSourceAndVolume();
+        if (this.paused) {
+            this.getPlayer().pause();
+        } else {
+            this.getPlayer().play();
+        }
     }
 
     public play() {
-        if (!this.currentPage || !Music.pageHasMusic(this.currentPage)) {
+        if (!this.currentPage) {
             return;
         }
         this.getPlayer().play();
@@ -41,7 +48,7 @@ export class Music {
     }
 
     public pause() {
-        if (!this.currentPage || !Music.pageHasMusic(this.currentPage)) {
+        if (!this.currentPage) {
             return;
         }
         this.getPlayer().pause();
@@ -78,14 +85,66 @@ export class Music {
     // so it will cache the previous content of the file or
     // remember if no such file previously existed. So we add a bogus query string
     // based on the current time so that it asks the server for the file again.
-    private setMusicSource(): void {
-        const player = this.getPlayer();
+    private setMusicSourceAndVolume(): void {
+        const music = this.currentPage.attributes["data-backgroundaudio"].value;
+        const page = this.getMusicPage();
+        if (
+            music === this.currentBackgroundAudio &&
+            page === this.currentBackgroundAudioPage
+        ) {
+            // Don't reset the audio src because that starts over from the beginning
+            // and once started we want a continuous stream until another source is
+            // chosen in the book.
+            return;
+        }
         const url = this.currentMusicUrl(
-            this.currentPage.attributes["data-backgroundaudio"].value +
-                "?nocache=" +
-                new Date().getTime()
+            music + "?nocache=" + new Date().getTime()
         );
-        player.setAttribute("src", url);
+        // console.log(
+        //     "DEBUG: Music.setMusicSource() src = '" +
+        //         (music ? url : music) +
+        //         "'"
+        // );
+        const player = this.getPlayer();
+        player.setAttribute("src", music ? url : music);
+        this.currentBackgroundAudio = music;
+        this.currentBackgroundAudioPage = page;
+        const volume = this.getMusicVolume();
+        if (volume.length) {
+            player.volume = Number(volume);
+        }
+    }
+
+    private getMusicVolume(): string {
+        if (!this.currentPage) {
+            return "";
+        }
+        const volume = this.currentPage.getAttribute(
+            "data-backgroundaudiovolume"
+        );
+        if (!volume) {
+            return "";
+        }
+        return volume;
+    }
+
+    private getMusicPage(): string {
+        if (!this.currentPage) {
+            return "";
+        }
+        const dataPageNumber = this.currentPage.getAttribute(
+            "data-page-number"
+        );
+        if (dataPageNumber) {
+            return dataPageNumber;
+        }
+        const dataXmatterPage = this.currentPage.getAttribute(
+            "data-xmatter-page"
+        );
+        if (dataXmatterPage) {
+            return dataXmatterPage;
+        }
+        return "";
     }
 
     private currentMusicUrl(filename: string): string {
@@ -94,6 +153,7 @@ export class Music {
 
     private playEnded() {
         // just start playing all over again.
+        this.getPlayer().currentTime = 0;
         this.play();
     }
 }
