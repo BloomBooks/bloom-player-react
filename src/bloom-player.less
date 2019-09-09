@@ -118,9 +118,18 @@ We just make them follow the main content normally. */
         flex-grow: 1;
     }
     transition: margin-top 0.3s;
-    margin-top: -64px;
     &.visible {
         margin-top: 0;
+    }
+
+    // These values match the current values in use in Material UI's AppBar code.
+    // Ideally we would get this dynamically, but I don't see a straightforward way to do that.
+    margin-top: -56px;
+    @media (min-width: 0px) and (orientation: landscape) {
+        margin-top: -48px;
+    }
+    @media (min-width: 600px) {
+        margin-top: -64px;
     }
 }
 
