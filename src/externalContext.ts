@@ -41,6 +41,13 @@ export function reportAnalytics(event: string, properties: any) {
     });
 }
 
+export function reportBookProperties(properties: any) {
+    postMessage({
+        messageType: "reportBookProperties",
+        params: { ...properties }
+    });
+}
+
 // When the player app pauses/quits or whatever else happens that it
 // decides that now is the time to send the report on how much of
 // this book was read, it will send the latest version of these props.
