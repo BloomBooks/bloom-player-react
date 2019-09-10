@@ -4,11 +4,11 @@ book inside of the Bloom:Publish:Android screen.
 */
 import { BloomPlayerCore } from "./bloom-player-core";
 import * as ReactDOM from "react-dom";
-import { onBackClicked } from "./externalContext";
+import { onBackClicked, reportBookProperties } from "./externalContext";
 import { ControlBar } from "./controlBar";
 import { ThemeProvider } from "@material-ui/styles";
 import theme from "./bloomPlayerTheme";
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 
 // This component is designed to wrap a BloomPlayer with some controls
 // for things like pausing audio and motion, hiding and showing
@@ -252,13 +252,12 @@ export const BloomPlayerControls: React.FunctionComponent<
                 reportBookProperties={bookProps => {
                     // Inform parent window when in an iframe.
                     if (window.parent) {
-                        window.parent.postMessage(
-                            {
-                                landscape: bookProps.landscape,
-                                canRotate: bookProps.canRotate
-                            },
-                            "*"
-                        );
+                        const bookPropsObj = {
+                            landscape: bookProps.landscape,
+                            canRotate: bookProps.canRotate
+                        };
+                        reportBookProperties(bookPropsObj);
+                        window.parent.postMessage(bookPropsObj, "*");
                     }
                     // So far there's no way (or need) to inform whatever set up a WebView.
                     //No! setWindowLandscape is about the window's orientation, not the book's: setWindowLandscape(bookProps.landscape);
