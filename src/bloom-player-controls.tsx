@@ -4,7 +4,7 @@ book inside of the Bloom:Publish:Android screen.
 */
 import { BloomPlayerCore } from "./bloom-player-core";
 import * as ReactDOM from "react-dom";
-import { onBackClicked } from "./externalContext";
+import { onBackClicked, showNavBar, hideNavBar } from "./externalContext";
 import { ControlBar } from "./controlBar";
 import { ThemeProvider } from "@material-ui/styles";
 import theme from "./bloomPlayerTheme";
@@ -270,6 +270,10 @@ export const BloomPlayerControls: React.FunctionComponent<
                 }}
                 onContentClick={e => {
                     if (props.allowToggleAppBar) {
+                        // This logic looks backwards because we are about to change the value of showAppBar.
+                        // We show and hide the app bar and nav bar together.
+                        !showAppBar ? showNavBar() : hideNavBar();
+
                         setShowAppBar(!showAppBar);
                         // Note: we could get the useEffect() to run this by listing
                         // showAppBar in its array of things to watch, but we
