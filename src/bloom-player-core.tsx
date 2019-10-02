@@ -24,6 +24,7 @@ import {
     setAmbientAnalyticsProperties,
     updateBookProgressReport
 } from "./externalContext";
+import LangData from "./langData";
 
 // See related comments in controlBar.tsx
 //tslint:disable-next-line:no-submodule-imports
@@ -59,6 +60,13 @@ interface IProps {
         landscape: boolean;
         canRotate: boolean;
     }) => void;
+
+    // controlsCallback feeds the book's languages up to BloomPlayerControls for the LanguageMenu to use.
+    controlsCallback?: (bookLanguages: LangData[]) => void;
+
+    // Set by BloomPlayerControls -> ControlBar -> LanguageMenu
+    // Changing this should modify bloom-visibility-code-on stuff in the DOM.
+    activeLanguageCode: string;
 
     reportPageProperties?: (properties: {
         hasAudio: boolean;
@@ -116,7 +124,7 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
 
     private static currentPagePlayer: BloomPlayerCore;
 
-    constructor(props: IProps, state) {
+    constructor(props: IProps, state: IState) {
         super(props, state);
         // Make this player (currently always the only one) the recipient for
         // notifications from narration.ts etc about duration etc.
@@ -144,6 +152,9 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
     private bookLanguage2: string | undefined;
     private bookLanguage3: string | undefined;
 
+    private metaDataObject: any | undefined;
+    private htmlElement: HTMLHtmlElement | undefined;
+
     private narration: Narration;
     private animation: Animation;
     private music: Music;
@@ -166,49 +177,30 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
     // We expect it to show some kind of loading indicator on initial render, then
     // we do this work. For now, won't get a loading indicator if you change the url prop.
     public componentDidUpdate(prevProps: IProps) {
-        // We want to localize once and only once after pages has been set and assembleStyleSheets has happened
+        // contains conditions to limit this to one time only after assembleStyleSheets has completed.
+        this.localizeOnce();
+        // also one-time setup; only the first time through
+        this.initializeMedia();
+
         if (
-            !this.isPagesLocalized &&
-            this.state.pages !== this.initialPages &&
-            this.state.styleRules !== this.initialStyleRules
+            !this.state.isLoading &&
+            prevProps.activeLanguageCode !== this.props.activeLanguageCode
         ) {
-            LocalizationManager.localizePages(
-                document.body,
-                this.getPreferredTranslationLanguages()
-            );
-            this.isPagesLocalized = true;
+            // The usual case invoked by changing the language on the player menu.
+            if (this.htmlElement) {
+                this.updateDivVisibilityByLangCode();
+                this.finishUp(false); // finishUp(false) just reloads the swiper pages from our stored html
+            }
         }
 
-        if (!this.video) {
-            this.video = new Video();
-        }
-        if (!this.narration) {
-            this.narration = new Narration();
-            this.narration.PageDurationAvailable = new LiteEvent<HTMLElement>();
-            this.animation = new Animation();
-            //this.narration.PageNarrationComplete.subscribe();
-            this.narration.PageDurationAvailable.subscribe(pageElement => {
-                this.animation.HandlePageDurationAvailable(
-                    pageElement!,
-                    this.narration.PageDuration
-                );
-            });
-        }
-        if (!this.music) {
-            this.music = new Music();
-        }
-        let newSourceUrl = this.props.url;
-        // Folder urls often (but not always) end in /. If so, remove it, so we don't get
-        // an empty filename or double-slashes in derived URLs.
-        if (newSourceUrl.endsWith("/")) {
-            newSourceUrl = newSourceUrl.substring(0, newSourceUrl.length - 1);
-        }
-        // Or we might get a url-encoded slash.
-        if (newSourceUrl.endsWith("%2f")) {
-            newSourceUrl = newSourceUrl.substring(0, newSourceUrl.length - 3);
-        }
+        const newSourceUrl = this.calculateNewUrl();
+        if (newSourceUrl && newSourceUrl !== this.sourceUrl) {
+            // We're changing books; reset several variables including isLoading,
+            // until we inform the controls which languages are available.
+            this.setState({ isLoading: true });
+            this.metaDataObject = undefined;
+            this.htmlElement = undefined;
 
-        if (newSourceUrl !== this.sourceUrl && newSourceUrl) {
             this.sourceUrl = newSourceUrl;
             // We support a two ways of interpreting URLs.
             // If the url ends in .htm, it is assumed to be the URL of the htm file that
@@ -225,7 +217,7 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
             // to look for the other as well.
             const slashIndex = this.sourceUrl.lastIndexOf("/");
             const encodedSlashIndex = this.sourceUrl.lastIndexOf("%2f");
-            let filename = "";
+            let filename: string;
             if (slashIndex > encodedSlashIndex) {
                 filename = this.sourceUrl.substring(
                     slashIndex + 1,
@@ -247,7 +239,11 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
                       Math.max(slashIndex, encodedSlashIndex)
                   )
                 : this.sourceUrl;
-            axios.get(urlOfBookHtmlFile).then(result => {
+            const htmlPromise = axios.get(urlOfBookHtmlFile);
+            const metadataPromise = axios.get(this.fullUrl("meta.json"));
+            Promise.all([htmlPromise, metadataPromise]).then(result => {
+                const [htmlResult, metadataResult] = result;
+                this.metaDataObject = metadataResult.data;
                 // Note: we do NOT want to try just making an HtmlElement (e.g., document.createElement("html"))
                 // and setting its innerHtml, since that leads to the browser trying to load all the
                 // urls referenced in the book, which is a waste and also won't work because we
@@ -255,13 +251,12 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
                 const parser = new DOMParser();
                 // we *think* bookDoc and bookHtmlElement get garbage collected
                 const bookDoc = parser.parseFromString(
-                    result.data,
+                    htmlResult.data,
                     "text/html"
                 );
                 const bookHtmlElement = bookDoc.documentElement as HTMLHtmlElement;
 
                 const body = bookHtmlElement.getElementsByTagName("body")[0];
-                const head = bookHtmlElement.getElementsByTagName("head")[0]; // need this to find creator meta element
                 this.bookLanguage1 = LocalizationUtils.getBookLanguage1(
                     body as HTMLBodyElement
                 );
@@ -274,86 +269,7 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
                 );
 
                 this.makeNonEditable(body);
-
-                // This function, the rest of the work we need to do, will be executed after we attempt
-                // to retrieve questions.json and either get it and convert it into extra pages,
-                // or fail to get it and make no changes.
-                const finishUp = () => {
-                    // assemble the page content list
-                    const pages = bookHtmlElement.getElementsByClassName(
-                        "bloom-page"
-                    );
-                    const swiperContent: string[] = [];
-                    if (this.props.showContextPages) {
-                        swiperContent.push(""); // blank page to fill the space left of first.
-                    }
-                    this.totalNumberedPages = 0;
-                    this.questionCount = 0;
-                    for (let i = 0; i < pages.length; i++) {
-                        const page = pages[i];
-                        const landscape = this.forceDevicePageSize(page);
-                        // this used to be done for us by react-slick, but swiper does not.
-                        // Since it's used by at least page-api code, it's easiest to just stick it in.
-                        page.setAttribute("data-index", i.toString(10));
-
-                        // Now we have all the information we need to call reportBookProps if it is set.
-                        if (i === 0 && this.props.reportBookProperties) {
-                            // Informs containing react controls (in the same frame)
-                            this.props.reportBookProperties({
-                                landscape,
-                                canRotate: this.canRotate
-                            });
-                        }
-
-                        this.fixRelativeUrls(page);
-
-                        // possibly more efficient to look for attribute data-page-number,
-                        // but due to a bug (BL-7303) many published books may have that on back-matter pages.
-                        const hasPageNum = page.classList.contains(
-                            "numberedPage"
-                        );
-                        if (hasPageNum) {
-                            this.indexOflastNumberedPage =
-                                i + (this.props.showContextPages ? 1 : 0);
-                            this.totalNumberedPages++;
-                        }
-                        if (
-                            page.getAttribute("data-analyticscategories") ===
-                            "comprehension"
-                        ) {
-                            // Note that this will count both new-style question pages,
-                            // and ones generated from old-style json.
-                            this.questionCount++;
-                        }
-
-                        swiperContent.push(page.outerHTML);
-                    }
-                    if (this.props.showContextPages) {
-                        swiperContent.push(""); // blank page to fill the space right of last.
-                    }
-
-                    this.creator = this.getCreator(head); // prep for reportBookOpened()
-                    this.reportBookOpened(body);
-
-                    this.assembleStyleSheets(bookHtmlElement);
-                    // assembleStyleSheets takes a while, fetching stylesheets. So even though we're letting
-                    // the dom start getting loaded here, we'll leave state.isLoading as true and let assembleStyleSheets
-                    // change it when it is done.
-                    this.setState({
-                        pages: swiperContent
-                    });
-
-                    // A pause hopefully allows the document to become visible before we
-                    // start playing any audio or movement on the first page.
-                    // Also gives time for the first page
-                    // element to actually get created in the document.
-                    // Note: typically in Chrome we won't actually start playing, because
-                    // of a rule that the user must interact with the document first.
-                    window.setTimeout(() => {
-                        this.setIndex(0);
-                        this.showingPage(0);
-                    }, 500);
-                };
+                this.htmlElement = bookHtmlElement;
 
                 const firstPage = bookHtmlElement.getElementsByClassName(
                     "bloom-page"
@@ -383,10 +299,10 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
                                 firstBackMatterPage
                             );
                         }
-                        finishUp();
+                        this.finishUp();
                     })
-                    .catch(() => finishUp());
-            });
+                    .catch(() => this.finishUp());
+            }); // end of block that loads html and meta.json
         } else if (prevProps.landscape !== this.props.landscape) {
             // rotating the phone...may need to switch the orientation class on each page.
             const pages = document.getElementsByClassName("bloom-page");
@@ -401,34 +317,221 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
             this.showingPage(this.state.currentSwiperIndex);
         }
         if (prevProps.paused !== this.props.paused) {
-            // this code was being called way too often!
-            if (this.props.paused) {
-                this.pauseAllMultimedia();
-            } else {
-                // This test determines if we changed pages while paused,
-                // since the narration object won't yet be updated.
-                if (BloomPlayerCore.currentPage !== this.narration.playerPage) {
-                    this.resetForNewPageAndPlay(BloomPlayerCore.currentPage);
-                }
-                this.narration.play();
-                this.video.play();
-                this.music.play();
-            }
+            this.handlePausePlay();
         }
-        if (
-            this.props.landscape !== prevProps.landscape &&
-            this.swiperInstance
-        ) {
-            // Without this, or without the delay, rotating a phone produces a strange result,
-            // displaying half of one page and half of the next. Debugging indicates that
-            // the update operation sees the old page size. Pushing it into the next cycle
-            // somehow prevents this.
-            window.setTimeout(() => this.swiperInstance.update(), 10);
+        if (this.swiperInstance) {
+            // Other refactoring seems to have fixed an earlier problem with switching orientation,
+            // so that we no longer need either the Swiper update or even the setTimeout here.
+            // OTOH, we need to do a lazy.load(), otherwise all our pictures disappear when changing languages!
+            this.swiperInstance.lazy.load();
         }
     }
 
     public componentWillUnmount() {
         this.pauseAllMultimedia();
+    }
+
+    // This function, the rest of the work we need to do, will be executed after we attempt
+    // to retrieve questions.json and either get it and convert it into extra pages,
+    // or fail to get it and make no changes.
+    // We also call this method when changing the language, but we only want it to update the swiper content
+    private finishUp(isNewBook: boolean = true) {
+        // assemble the page content list
+        if (!this.htmlElement) {
+            return;
+        }
+        const pages = this.htmlElement.getElementsByClassName("bloom-page");
+        const swiperContent: string[] = [];
+        if (this.props.showContextPages) {
+            swiperContent.push(""); // blank page to fill the space left of first.
+        }
+        if (isNewBook) {
+            this.totalNumberedPages = 0;
+            this.questionCount = 0;
+        }
+        for (let i = 0; i < pages.length; i++) {
+            const page = pages[i];
+            const landscape = this.forceDevicePageSize(page);
+            // this used to be done for us by react-slick, but swiper does not.
+            // Since it's used by at least page-api code, it's easiest to just stick it in.
+            page.setAttribute("data-index", i.toString(10));
+            // Now we have all the information we need to call reportBookProps if it is set.
+            if (i === 0 && this.props.reportBookProperties) {
+                // Informs containing react controls (in the same frame)
+                this.props.reportBookProperties({
+                    landscape,
+                    canRotate: this.canRotate
+                });
+            }
+            if (isNewBook) {
+                this.fixRelativeUrls(page);
+                // possibly more efficient to look for attribute data-page-number,
+                // but due to a bug (BL-7303) many published books may have that on back-matter pages.
+                const hasPageNum = page.classList.contains("numberedPage");
+                if (hasPageNum) {
+                    this.indexOflastNumberedPage =
+                        i + (this.props.showContextPages ? 1 : 0);
+                    this.totalNumberedPages++;
+                }
+                if (
+                    page.getAttribute("data-analyticscategories") ===
+                    "comprehension"
+                ) {
+                    // Note that this will count both new-style question pages,
+                    // and ones generated from old-style json.
+                    this.questionCount++;
+                }
+            }
+            swiperContent.push(page.outerHTML);
+        }
+        if (this.props.showContextPages) {
+            swiperContent.push(""); // blank page to fill the space right of last.
+        }
+        if (isNewBook) {
+            const head = this.htmlElement.getElementsByTagName("head")[0];
+            this.creator = this.getCreator(head); // prep for reportBookOpened()
+            const body = this.htmlElement.getElementsByTagName("body")[0];
+            this.reportBookOpened(body);
+            if (this.props.controlsCallback) {
+                const languages = LangData.createLangDataArrayFromMetadata(
+                    body,
+                    this.metaDataObject
+                );
+                // Tell BloomPlayerControls which languages are available for the Language Menu.
+                this.props.controlsCallback(languages);
+            }
+        }
+        this.assembleStyleSheets(this.htmlElement);
+        // assembleStyleSheets takes a while, fetching stylesheets. So even though we're letting
+        // the dom start getting loaded here, we'll leave state.isLoading as true and let assembleStyleSheets
+        // change it when it is done.
+        this.setState({
+            pages: swiperContent
+        });
+        // A pause hopefully allows the document to become visible before we
+        // start playing any audio or movement on the first page.
+        // Also gives time for the first page
+        // element to actually get created in the document.
+        // Note: typically in Chrome we won't actually start playing, because
+        // of a rule that the user must interact with the document first.
+        if (isNewBook) {
+            window.setTimeout(() => {
+                this.setIndex(0);
+                this.showingPage(0);
+            }, 500);
+        }
+    }
+
+    private localizeOnce() {
+        // We want to localize once and only once after pages has been set and assembleStyleSheets has happened.
+        if (
+            !this.isPagesLocalized &&
+            this.state.pages !== this.initialPages &&
+            this.state.styleRules !== this.initialStyleRules
+        ) {
+            LocalizationManager.localizePages(
+                document.body,
+                this.getPreferredTranslationLanguages()
+            );
+            this.isPagesLocalized = true;
+        }
+    }
+
+    private initializeMedia() {
+        // The conditionals guarantee that each type of media will only be created once.
+        if (!this.video) {
+            this.video = new Video();
+        }
+        if (!this.narration) {
+            this.narration = new Narration();
+            this.narration.PageDurationAvailable = new LiteEvent<HTMLElement>();
+            this.animation = new Animation();
+            //this.narration.PageNarrationComplete.subscribe();
+            this.narration.PageDurationAvailable.subscribe(pageElement => {
+                this.animation.HandlePageDurationAvailable(
+                    pageElement!,
+                    this.narration.PageDuration
+                );
+            });
+        }
+        if (!this.music) {
+            this.music = new Music();
+        }
+    }
+
+    private calculateNewUrl(): string {
+        let newSourceUrl = this.props.url;
+        // Folder urls often (but not always) end in /. If so, remove it, so we don't get
+        // an empty filename or double-slashes in derived URLs.
+        if (newSourceUrl.endsWith("/")) {
+            newSourceUrl = newSourceUrl.substring(0, newSourceUrl.length - 1);
+        }
+        // Or we might get a url-encoded slash.
+        if (newSourceUrl.endsWith("%2f")) {
+            newSourceUrl = newSourceUrl.substring(0, newSourceUrl.length - 3);
+        }
+        return newSourceUrl;
+    }
+
+    private handlePausePlay() {
+        if (this.props.paused) {
+            this.pauseAllMultimedia();
+        } else {
+            // This test determines if we changed pages while paused,
+            // since the narration object won't yet be updated.
+            if (BloomPlayerCore.currentPage !== this.narration.playerPage) {
+                this.resetForNewPageAndPlay(BloomPlayerCore.currentPage);
+            }
+            this.narration.play();
+            this.video.play();
+            this.music.play();
+        }
+    }
+
+    // Go through all .bloom-editable divs turning visibility off/on based on the activeLanguage (isoCode).
+    private updateDivVisibilityByLangCode(): void {
+        if (
+            this.props.activeLanguageCode === undefined ||
+            this.htmlElement === undefined
+        ) {
+            return; // shouldn't happen, just a precaution
+        }
+        const editableDivs = this.htmlElement.ownerDocument!.evaluate(
+            ".//div[contains(@class, 'bloom-editable')]",
+            this.htmlElement,
+            null,
+            XPathResult.UNORDERED_NODE_SNAPSHOT_TYPE,
+            null
+        );
+        for (let iedit = 0; iedit < editableDivs.snapshotLength; iedit++) {
+            const divElement = editableDivs.snapshotItem(
+                iedit
+            ) as HTMLDivElement;
+            const divLang = divElement!.getAttribute("lang");
+            if (divLang === "z") {
+                continue;
+            }
+            let classes = divElement!.className;
+            // We don't want to mess with what's visible in xmatter
+            if (this.skipVisibilityModsForThisDiv(divElement)) {
+                continue;
+            }
+            classes = classes.replace(" bloom-visibility-code-on", "");
+            if (this.props.activeLanguageCode === divLang) {
+                classes += " bloom-visibility-code-on";
+            }
+            divElement.className = classes;
+        } // end 'for' editableDivs
+    }
+
+    private skipVisibilityModsForThisDiv(divElement: HTMLDivElement): boolean {
+        const dataBookAttr = divElement!.attributes["data-book"];
+        return (
+            dataBookAttr &&
+            (divElement!.classList.contains("bloom-content1") ||
+                divElement!.classList.contains("bloom-contentNational1") ||
+                divElement!.classList.contains("bloom-contentNational2"))
+        );
     }
 
     private pauseAllMultimedia() {
@@ -469,44 +572,43 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
     }
 
     private reportBookOpened(body: HTMLBodyElement) {
-        axios.get(this.fullUrl("meta.json")).then(result => {
-            //console.log(JSON.stringify(result));
-            // surprisingly, we don't get the file content as a string, but already parsed ito a object.
-            const metaData = result.data;
-            this.brandingProjectName = metaData.brandingProjectName;
-            this.bookTitle = metaData.title;
-            const bloomdVersion = metaData.bloomdVersion
-                ? metaData.bloomdVersion
-                : 0;
+        // this metaDataObject comes already parsed into a js object
+        if (!this.metaDataObject) {
+            return;
+        }
+        this.brandingProjectName = this.metaDataObject.brandingProjectName;
+        this.bookTitle = this.metaDataObject.title;
+        const bloomdVersion = this.metaDataObject.bloomdVersion
+            ? this.metaDataObject.bloomdVersion
+            : 0;
 
-            this.features =
-                bloomdVersion > 0
-                    ? metaData.features
-                    : this.guessFeatures(body);
+        this.features =
+            bloomdVersion > 0
+                ? this.metaDataObject.features
+                : this.guessFeatures(body);
 
-            // Some facts about the book will go out with not just this event,
-            // but also subsequent events. We call these "ambient" properties.
-            const ambientAnalyticsProps: any = {
-                totalNumberedPages: this.totalNumberedPages,
-                questionCount: this.questionCount,
-                contentLang: this.bookLanguage1,
-                features: this.features,
-                sessionId: this.sessionId,
-                title: this.bookTitle,
-                creator: this.creator
-            };
-            if (this.brandingProjectName) {
-                ambientAnalyticsProps.brandingProjectName = this.brandingProjectName;
-            }
-            if (this.originalCopyrightHolder) {
-                ambientAnalyticsProps.originalCopyrightHolder = this.originalCopyrightHolder;
-            }
-            if (this.copyrightHolder) {
-                ambientAnalyticsProps.copyrightHolder = this.copyrightHolder;
-            }
-            setAmbientAnalyticsProperties(ambientAnalyticsProps);
-            reportAnalytics("BookOrShelf opened", {});
-        });
+        // Some facts about the book will go out with not just this event,
+        // but also subsequent events. We call these "ambient" properties.
+        const ambientAnalyticsProps: any = {
+            totalNumberedPages: this.totalNumberedPages,
+            questionCount: this.questionCount,
+            contentLang: this.bookLanguage1,
+            features: this.features,
+            sessionId: this.sessionId,
+            title: this.bookTitle,
+            creator: this.creator
+        };
+        if (this.brandingProjectName) {
+            ambientAnalyticsProps.brandingProjectName = this.brandingProjectName;
+        }
+        if (this.originalCopyrightHolder) {
+            ambientAnalyticsProps.originalCopyrightHolder = this.originalCopyrightHolder;
+        }
+        if (this.copyrightHolder) {
+            ambientAnalyticsProps.copyrightHolder = this.copyrightHolder;
+        }
+        setAmbientAnalyticsProperties(ambientAnalyticsProps);
+        reportAnalytics("BookOrShelf opened", {});
     }
 
     // In July 2019, Bloom Desktop added a bloomdVersion to meta.json and at the same
@@ -703,6 +805,7 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
             XPathResult.UNORDERED_NODE_SNAPSHOT_TYPE,
             null
         );
+        const regexp = new RegExp(/background-image:url\(['"](.*)['"]\)/);
 
         for (let j = 0; j < bgSrcElts.snapshotLength; j++) {
             const item = bgSrcElts.snapshotItem(j) as HTMLElement;
@@ -710,13 +813,13 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
                 continue;
             }
             const style = item.getAttribute("style") || ""; // actually we know it has style, but make lint happy
-            const match = /background-image:url\(['"](.*?)['"]/.exec(style);
+            const match = regexp.exec(style);
             if (!match) {
                 continue;
             }
             const newUrl = this.fullUrl(match[1]);
             const newStyle = style.replace(
-                /background-image:url\(['"](.*?)['"]/,
+                regexp,
                 // if we weren't using lazy-load:
                 //  "background-image:url('" + newUrl + "'"
                 ""
@@ -843,7 +946,10 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
                         }
                     }
                 });
-                this.setState({ styleRules: combinedStyle, isLoading: false });
+                this.setState({
+                    styleRules: combinedStyle,
+                    isLoading: false
+                });
                 this.props.pageStylesAreNowInstalled();
             });
     }
@@ -899,7 +1005,9 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
                 loadPrevNext: true,
                 loadOnTransitionStart: true,
                 loadPrevNextAmount: 2
-            }
+            },
+            // This seems make it unnecessary to call Swiper.update at the end of componentDidUpdate.
+            shouldSwiperUpdate: true
         };
         // multiple classes help make rules more specific than those in the book's stylesheet
         // (which benefit from an extra attribute item like __scoped_N)
