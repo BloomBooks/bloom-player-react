@@ -15,6 +15,7 @@ import { ControlBar } from "./controlBar";
 import { ThemeProvider } from "@material-ui/styles";
 import theme from "./bloomPlayerTheme";
 import React, { useState, useEffect } from "react";
+import LangData from "./langData";
 
 // This component is designed to wrap a BloomPlayer with some controls
 // for things like pausing audio and motion, hiding and showing
@@ -87,6 +88,9 @@ export const BloomPlayerControls: React.FunctionComponent<
     const [hasVideo, setHasVideo] = useState(false);
     const [pageStylesInstalled, setPageStylesInstalled] = useState(false);
     const [maxPageDimension, setMaxPageDimension] = useState(0);
+    const emptyLangDataArray: LangData[] = [];
+    const [languageData, setLanguageData] = useState(emptyLangDataArray);
+    const [activeLanguageCode, setActiveLanguageCode] = useState("");
 
     // the point of this is just to have an ever-increasing number; each time the number
     // is increased, it will cause the useEffect to scale the page to the window again.
@@ -267,6 +271,21 @@ export const BloomPlayerControls: React.FunctionComponent<
             scaleFactor}px; overflow: hidden;}`;
     };
 
+    const handleLanguageChanged = (newActiveLanguageCode: string): void => {
+        if (activeLanguageCode === newActiveLanguageCode) {
+            return; // no change
+        }
+        LangData.selectNewLanguageCode(languageData, newActiveLanguageCode);
+        setActiveLanguageCode(newActiveLanguageCode);
+    };
+
+    const updateLanguagesDataWhenOpeningNewBook = (
+        bookLanguages: LangData[]
+    ): void => {
+        setLanguageData(bookLanguages);
+        setActiveLanguageCode(bookLanguages[0].Code);
+    };
+
     const {
         allowToggleAppBar,
         showBackButton,
@@ -284,6 +303,10 @@ export const BloomPlayerControls: React.FunctionComponent<
                 pausedChanged={(p: boolean) => setPaused(p)}
                 backClicked={() => onBackClicked()}
                 showPlayPause={hasAudio || hasMusic || hasVideo}
+                bookLanguages={languageData}
+                onLanguageChanged={(isoCode: string) =>
+                    handleLanguageChanged(isoCode)
+                }
             />
             <BloomPlayerCore
                 url={props.url}
@@ -302,6 +325,7 @@ export const BloomPlayerControls: React.FunctionComponent<
                     // Android WebView and html iframe
                     reportBookProperties(bookPropsObj);
                 }}
+                controlsCallback={updateLanguagesDataWhenOpeningNewBook}
                 reportPageProperties={pageProps => {
                     setHasAudio(pageProps.hasAudio);
                     setHasMusic(pageProps.hasMusic);
@@ -321,6 +345,7 @@ export const BloomPlayerControls: React.FunctionComponent<
                         );
                     }
                 }}
+                activeLanguageCode={activeLanguageCode}
             />
         </div>
     );
