@@ -15,6 +15,7 @@ import { ControlBar } from "./controlBar";
 import { ThemeProvider } from "@material-ui/styles";
 import theme from "./bloomPlayerTheme";
 import React, { useState, useEffect } from "react";
+import LangData from "./langData";
 
 // This component is designed to wrap a BloomPlayer with some controls
 // for things like pausing audio and motion, hiding and showing
@@ -87,6 +88,9 @@ export const BloomPlayerControls: React.FunctionComponent<
     const [hasVideo, setHasVideo] = useState(false);
     const [pageStylesInstalled, setPageStylesInstalled] = useState(false);
     const [maxPageDimension, setMaxPageDimension] = useState(0);
+    const emptyArray: LangData[] = [];
+    const [languageData, setLanguageData] = useState(emptyArray);
+    const [activeLanguageCode, setActiveLanguageCode] = useState("");
 
     // the point of this is just to have an ever-increasing number; each time the number
     // is increased, it will cause the useEffect to scale the page to the window again.
@@ -267,6 +271,38 @@ export const BloomPlayerControls: React.FunctionComponent<
             scaleFactor}px; overflow: hidden;}`;
     };
 
+    const getLangDataByCode = (languageCode: string): LangData => {
+        return languageData.filter(lang => lang.Code === languageCode)[0];
+    };
+
+    const getActiveCodeFromLangData = (): string => {
+        if (languageData.length < 1) {
+            return "";
+        }
+        return languageData.filter(lang => lang.IsSelected)[0].Code;
+    };
+
+    const handleLanguageChanged = (newActiveLanguageCode: string): void => {
+        const oldActiveLangCode = getActiveCodeFromLangData();
+        if (oldActiveLangCode === newActiveLanguageCode) {
+            return; // no change happening here!
+        }
+        const newActiveLangData = getLangDataByCode(newActiveLanguageCode);
+        newActiveLangData.IsSelected = true;
+        if (oldActiveLangCode !== undefined) {
+            const oldActiveLangData = getLangDataByCode(oldActiveLangCode);
+            oldActiveLangData.IsSelected = false;
+        }
+        setActiveLanguageCode(newActiveLanguageCode);
+    };
+
+    const updateLanguagesDataWhenOpeningNewBook = (
+        bookLanguages: LangData[]
+    ): void => {
+        setLanguageData(bookLanguages);
+        setActiveLanguageCode(bookLanguages[0].Code);
+    };
+
     const {
         allowToggleAppBar,
         showBackButton,
@@ -284,6 +320,10 @@ export const BloomPlayerControls: React.FunctionComponent<
                 pausedChanged={(p: boolean) => setPaused(p)}
                 backClicked={() => onBackClicked()}
                 showPlayPause={hasAudio || hasMusic || hasVideo}
+                bookLanguages={languageData}
+                onLanguageChanged={(isoCode: string) =>
+                    handleLanguageChanged(isoCode)
+                }
             />
             <BloomPlayerCore
                 url={props.url}
@@ -302,6 +342,7 @@ export const BloomPlayerControls: React.FunctionComponent<
                     // Android WebView and html iframe
                     reportBookProperties(bookPropsObj);
                 }}
+                controlsCallback={updateLanguagesDataWhenOpeningNewBook}
                 reportPageProperties={pageProps => {
                     setHasAudio(pageProps.hasAudio);
                     setHasMusic(pageProps.hasMusic);
@@ -321,6 +362,7 @@ export const BloomPlayerControls: React.FunctionComponent<
                         );
                     }
                 }}
+                activeLanguageCode={activeLanguageCode}
             />
         </div>
     );

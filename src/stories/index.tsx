@@ -79,3 +79,13 @@ AddBloomPlayerStory(
     "Book with music",
     "https://s3.amazonaws.com/bloomharvest-sandbox/bloom.bible.stories%40gmail.com/a70f135b-07b0-4bfb-962e-0aabb82f87ec/bloomdigital%2findex.htm"
 );
+
+AddBloomPlayerStory(
+    "Book with multiple languages",
+    "https://s3.amazonaws.com/bloomharvest-sandbox/jeffrey_su%40sil.org/13a89b73-b74d-47b6-b075-75cef198362c/bloomdigital%2findex.htm"
+);
+
+AddBloomPlayerStory(
+    "Book with multiple languages 2",
+    "https://s3.amazonaws.com/bloomharvest-sandbox/colin_suggett%40sil.org%2fe88a5f3f-b769-4af7-a05f-1b3a0a417c30/bloomdigital%2findex.htm"
+);
