@@ -80,11 +80,12 @@ export default class LangData {
     ): LangData[] {
         const result: LangData[] = [];
         if (!metadataObject.hasOwnProperty("language-display-names")) {
-            return result; // shouldn't ever happen
+            const fallbackLangData = LangData.getMinimalFallbackL1(body);
+            result.push(fallbackLangData);
+            return result;
         }
         const languageDisplayNames: object =
             metadataObject["language-display-names"];
-        let index = 0;
         for (const code in languageDisplayNames) {
             if (languageDisplayNames.hasOwnProperty(code)) {
                 const displayName: string = languageDisplayNames[code];
@@ -92,18 +93,61 @@ export default class LangData {
                     displayName === "" ? code : displayName,
                     code
                 );
-                if (index === 0) {
-                    // assume the first is selected to begin with
-                    langData.IsSelected = true;
-                }
                 if (LangData.hasAudioInLanguage(body, code)) {
                     langData.HasAudio = true;
                 }
                 result.push(langData);
-                index++;
             }
         }
+        // Apply fallback information if we need it
+        if (result.length === 0 || result[0].Name === result[0].Code) {
+            const fallbackLangData = LangData.getMinimalFallbackL1(body);
+            if (result.length === 0) {
+                result.push(fallbackLangData);
+            } else {
+                result[0].name = fallbackLangData.Name;
+            }
+        }
+        // Always assume the first is selected to begin with
+        result[0].IsSelected = true;
         return result;
+    }
+
+    private static getMinimalFallbackL1(body: HTMLBodyElement): LangData {
+        const dataDivElement = body.ownerDocument!.getElementById(
+            "bloomDataDiv"
+        );
+        let code: string = "";
+        let name: string = "";
+        for (let i = 0; i < dataDivElement!.childNodes.length; i++) {
+            const div = dataDivElement!.childNodes[i] as HTMLDivElement;
+            if (!div || div.nodeName !== "DIV") {
+                continue;
+            }
+            const langAttr = div.getAttribute("lang");
+            if (langAttr !== "*") {
+                continue;
+            }
+            const databookAttr = div.getAttribute("data-book");
+            if (!databookAttr) {
+                continue;
+            }
+            if (databookAttr === "contentLanguage1" && div.textContent) {
+                code = div.textContent.trim();
+            }
+            if (databookAttr === "languagesOfBook" && div.textContent) {
+                name = div.textContent.trim();
+            }
+        }
+        const fallback = new LangData(
+            name !== "" ? name : "English",
+            code !== "" ? code : "en"
+        );
+        fallback.IsSelected = true;
+        if (LangData.hasAudioInLanguage(body, code)) {
+            fallback.HasAudio = true;
+        }
+        return fallback;
     }
 
     private static hasAudioInLanguage(
