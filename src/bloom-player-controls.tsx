@@ -296,7 +296,9 @@ export const BloomPlayerControls: React.FunctionComponent<
         bookLanguages: LangData[]
     ): void => {
         setLanguageData(bookLanguages);
-        setActiveLanguageCode(bookLanguages[0].Code);
+        if (bookLanguages.length > 0) {
+            setActiveLanguageCode(bookLanguages[0].Code);
+        }
     };
 
     const {
