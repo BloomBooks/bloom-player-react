@@ -100,13 +100,16 @@
         "webpack-merge": "^4.2.1",
         "yarn": "^1.15.2"
     },
-    "dependencies": {},
+    "dependencies": {
+        "raw-loader": "^3.1.0"
+    },
     "files": [
         "dist/*.js",
         "dist/bloomplayer.htm",
         "dist/*.mp3",
         "lib/*.js",
-        "dist/*.css"
+        "dist/*.css",
+        "dist/*.tsv"
     ],
     "jest": {
         "testEnvironment": "jsdom"
