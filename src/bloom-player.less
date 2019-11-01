@@ -176,8 +176,9 @@ We just make them follow the main content normally. */
     }
     .swiper-button-next,
     .swiper-button-prev {
-        height: 67%;
-        top: 18%;
+        height: 66%;
+        top: 17%; // height at 66% leaves 34% spacing, half of that is 17%
+        margin-top: unset; // defeat Swiper's own positioning that would throw ours off
         background-color: transparent; // except when hovering, see below.
         // This makes the grey buttons, which are all you can see when not hovering,
         // quite faint, allowing all the page content to be seen through them,
@@ -197,7 +198,9 @@ We just make them follow the main content normally. */
         }
         button {
             position: relative;
-            top: calc(50% - 0.5em);
+            // This is the calc. for .largeOutsideButtons; see under :not(.largeOutsideButtons) below for other calc.
+            //   12px = 1/2 of padding top and bottom; 0.5em = 1/2 of MuiSvgIcon-root height
+            top: calc(50% - 12px - 0.5em);
             margin: 0 auto;
             display: block;
             color: @hoverNextPrevButtonBar;
@@ -289,6 +292,7 @@ We just make them follow the main content normally. */
             width: 0.8em;
             height: 0.8em;
         }
+        top: calc(50% - 0.4em); // less 1/2 button height
     }
 }
 
