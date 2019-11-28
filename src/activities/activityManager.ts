@@ -37,7 +37,8 @@ export interface IActivityInformation {
 
 export class ActivityManager {
     private builtInActivities: { [id: string]: IActivityModule } = {};
-    previousPageElement: HTMLElement;
+    private previousPageElement: HTMLElement;
+    private bookActivityGroupings: { [id: string]: number[] } = {};
 
     constructor() {
         this.builtInActivities["iframe"] = iframeModule as IActivityModule;
@@ -82,6 +83,11 @@ export class ActivityManager {
         }
         return activityID;
     }
+
+    private getAnalyticsCategoryOfPage(pageDiv: HTMLElement) {
+        return pageDiv.getAttribute("data-analyticsCategories") || "";
+    }
+
     public processPage(
         bookUrlPrefix: string,
         // NOTE: this is not the same element we will get as a parameter in showingPage().
@@ -129,6 +135,7 @@ export class ActivityManager {
         }
     }
 
+    // Showing a new page, so stop any previous activity and start any new one that might be on the new page.
     public showingPage(pageIndex: number, bloomPageElement: HTMLElement) {
         // At the moment bloom-player-core will always call us
         // twice if the book is landscape. Probably that could
@@ -168,9 +175,13 @@ export class ActivityManager {
                 ) as IActivityObject;
                 // for use in styling things differently during playback versus book editing
                 bloomPageElement.classList.add("bloom-activityPlayback");
+                const analyticsCategory = this.getAnalyticsCategoryOfPage(
+                    bloomPageElement
+                );
                 activity.context = new ActivityContext(
                     pageIndex,
-                    bloomPageElement
+                    bloomPageElement,
+                    this.bookActivityGroupings[analyticsCategory]
                 );
                 activity.runningObject!.start(activity.context);
             }
@@ -187,5 +198,21 @@ export class ActivityManager {
             }
         }
         return false;
+    }
+
+    public collectActivityContextForBook(pages: HTMLCollectionOf<Element>) {
+        for (let index = 0; index < pages.length; index++) {
+            const page = pages[index] as HTMLElement;
+            const analyticsCategory = this.getAnalyticsCategoryOfPage(page);
+            if (analyticsCategory === "") {
+                continue;
+            }
+            const existing = this.bookActivityGroupings[analyticsCategory];
+            if (existing) {
+                existing.push(index);
+            } else {
+                this.bookActivityGroupings[analyticsCategory] = [index];
+            }
+        }
     }
 }
