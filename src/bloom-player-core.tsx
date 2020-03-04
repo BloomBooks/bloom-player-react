@@ -182,6 +182,7 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
     private video: Video;
     private canRotate: boolean;
     private autoAdvance: boolean;
+    private playAnimations: boolean;
 
     private isPagesLocalized: boolean = false;
 
@@ -314,7 +315,10 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
                         this.canRotate = body.hasAttribute("data-bfcanrotate"); // expect value allOrientations;bloomReader, should we check?
                         this.autoAdvance = body.hasAttribute(
                             "data-bfautoadvance"
-                        ); // expect value landscape:bloomReader, should we check?
+                        ); // expect value landscape;bloomReader, should we check?
+                        this.playAnimations = body.hasAttribute(
+                            "data-bfplayanimations"
+                        ); // expect value landscape;bloomReader, should we check?
 
                         this.copyrightHolder = this.getCopyrightInfo(
                             body,
@@ -534,10 +538,12 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
             this.narration.PageNarrationComplete = new LiteEvent<HTMLElement>();
             this.animation = new Animation();
             this.narration.PageDurationAvailable.subscribe(pageElement => {
-                this.animation.HandlePageDurationAvailable(
-                    pageElement!,
-                    this.narration.PageDuration
-                );
+                if (this.playAnimations) {
+                    this.animation.HandlePageDurationAvailable(
+                        pageElement!,
+                        this.narration.PageDuration
+                    );
+                }
             });
             this.narration.PageNarrationComplete.subscribe(pageElement => {
                 this.HandlePageNarrationComplete(pageElement);
@@ -582,7 +588,9 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
                 this.resetForNewPageAndPlay(BloomPlayerCore.currentPage);
             }
             this.narration.play();
-            this.animation.PlayAnimation();
+            if (this.playAnimations) {
+                this.animation.PlayAnimation();
+            }
             this.video.play();
             this.music.play();
         }
@@ -746,7 +754,9 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
 
     private pauseAllMultimedia() {
         this.narration.pause();
-        this.animation.PauseAnimation();
+        if (this.playAnimations) {
+            this.animation.PauseAnimation();
+        }
         this.video.pause();
         this.music.pause();
     }
@@ -1403,7 +1413,9 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
             if (this.canRotate) {
                 this.forceDevicePageSize(bloomPage);
             }
-            this.animation.HandlePageBeforeVisible(bloomPage);
+            if (this.playAnimations) {
+                this.animation.HandlePageBeforeVisible(bloomPage);
+            }
             // Don't need to be playing a video that's off-screen,
             // and definitely don't want to be reporting analytics on
             // its continued playing.
@@ -1556,11 +1568,16 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
         // which calls an animation method to start the image animation.
         this.narration.computeDuration(bloomPage);
         this.narration.playAllSentences(bloomPage);
-        if (Animation.pageHasAnimation(bloomPage as HTMLDivElement)) {
+        if (
+            this.playAnimations &&
+            Animation.pageHasAnimation(bloomPage as HTMLDivElement)
+        ) {
             this.animation.HandlePageBeforeVisible(bloomPage);
         }
         this.video.HandlePageVisible(bloomPage);
-        this.animation.HandlePageVisible(bloomPage);
+        if (this.playAnimations) {
+            this.animation.HandlePageVisible(bloomPage);
+        }
         this.music.HandlePageVisible(bloomPage);
     }
 }
