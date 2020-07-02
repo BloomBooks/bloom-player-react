@@ -67,11 +67,22 @@ export class AutonymHandler {
 
     private getThreeLetterIsoCode(code: string): string | undefined {
         if (code.length < 3) {
-            // If the two-letter code is not in our index, this returns 'undefined'
+            // If the two-letter code is not in our index, this returns 'undefined'.
             return this.twoLetterTothreeLetterIndex[code];
         }
-        const splitCode = code.split("-")[0]; // in case of some complicated Regional, Script, Variant stuff
+        const splitCode = code.split("-")[0]; // in case of Regional, Script, Variant codes
         if (splitCode.length < 4) {
+            if (splitCode.length === 2) {
+                // If the two-letter code (after splitting off Regional, Script, Variant codes)
+                // is not in our index, this returns 'undefined'.
+                // BL-8268 among other situations, this handles 'zh-CN' by returning 'zho', which is in
+                // our database with english: 'Chinese' and autonym: 中文.
+                const threeLetterFromTwoLetter = this
+                    .twoLetterTothreeLetterIndex[splitCode];
+                return threeLetterFromTwoLetter
+                    ? threeLetterFromTwoLetter
+                    : splitCode;
+            }
             return splitCode;
         }
         return undefined; // failed to get a decent iso639 code
