@@ -86,6 +86,7 @@ export default class Narration {
                     this.PageNarrationComplete.raise();
                 }, kMinDuration * 1000);
             }
+            BloomPlayerCore.setVideoModeIfAppropriate();
             return;
         }
 
@@ -155,7 +156,6 @@ export default class Narration {
     }
 
     private handlePlayPromise(promise: Promise<void>) {
-
         // In newer browsers, play() returns a promise which fails
         // if the browser disobeys the command to play, as some do
         // if the user hasn't 'interacted' with the page in some
@@ -207,10 +207,7 @@ export default class Narration {
                 // the one kind of play error that is fixed by the user just interacting.
                 // If there's some other reason we can't play, showing as paused may not
                 // be useful. See comments on the similar code in music.ts
-                if (
-                    reason.name === "NotAllowedError" &&
-                    this.PlayFailed
-                ) {
+                if (reason.name === "NotAllowedError" && this.PlayFailed) {
                     this.PlayFailed.raise();
                 }
             });
@@ -523,8 +520,8 @@ export default class Narration {
         player.setAttribute(
             "src",
             this.currentAudioUrl(this.currentAudioId) +
-            "?nocache=" +
-            new Date().getTime()
+                "?nocache=" +
+                new Date().getTime()
         );
     }
 
@@ -537,7 +534,7 @@ export default class Narration {
     };
 
     private getPlayer(): HTMLMediaElement {
-        const audio = this.getAudio("bloom-audio-player", audio => { });
+        const audio = this.getAudio("bloom-audio-player", audio => {});
         // We used to do this in the init call, but sometimes the function didn't get called.
         // Suspecting that there are cases, maybe just in storybook, where a new instance
         // of the narration object gets created, but the old audio element still exists.

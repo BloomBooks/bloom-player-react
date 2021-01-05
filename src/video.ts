@@ -36,7 +36,7 @@ export class Video {
         }
     }
 
-    public HandlePageVisible(bloomPage: HTMLElement) {
+    public HandlePageVisible(bloomPage: HTMLElement, player: BloomPlayerCore) {
         this.currentPage = bloomPage as HTMLDivElement;
         if (!Video.pageHasVideo(this.currentPage)) {
             this.currentVideoElement = undefined;
@@ -50,6 +50,7 @@ export class Video {
                 (ev.target as HTMLVideoElement).currentTime -
                     this.videoStartTime
             );
+            player.playAudioAndAnimation();
         };
         if (this.paused) {
             this.currentVideoElement.pause();
@@ -59,7 +60,10 @@ export class Video {
                 this.videoStartTime = videoElement.currentTime;
                 const promise = videoElement.play();
                 if (promise) {
-                    promise.catch(reason => console.log(reason));
+                    promise.catch(reason => {
+                        console.log(reason);
+                        player.playAudioAndAnimation();
+                    });
                 }
             }, 1000);
         }
