@@ -44,9 +44,13 @@ import { BookInteraction } from "./bookInteraction";
 import $ from "jquery";
 import "jquery.nicescroll";
 
-enum PlaybackMode {
-    Video,
-    Audio
+export enum PlaybackMode {
+    NewPage, // starting a new page ready to play
+    NewPageMediaPaused, // starting a new page in the "paused" state
+    VideoPlaying, // video is playing
+    VideoPaused, // video is paused
+    AudioPlaying, // narration, music, and/or animation are playing (or possibly finished)
+    AudioPaused // narration, music, and/or animation are paused
 }
 // BloomPlayer takes a URL param that directs it to Bloom book.
 // (See comment on sourceUrl for exactly how.)
@@ -206,7 +210,8 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
     private static currentPage: HTMLElement | null;
     private static currentPageIndex: number;
     private static currentPageHasVideo: boolean;
-    private static currentPlaybackMode: PlaybackMode;
+
+    public static currentPlaybackMode: PlaybackMode;
 
     private indexOflastNumberedPage: number;
 
@@ -619,7 +624,7 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
             this.video = new Video();
             this.video.PageVideoComplete = new LiteEvent<HTMLElement>();
             this.video.PageVideoComplete.subscribe(pageElement => {
-                this.playAudioAndAnimation(pageElement);
+                this.playAudioAndAnimation(pageElement); // allow replay from beginning of page
             });
         }
         if (!this.narration) {
@@ -645,7 +650,7 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
                 }
             });
             this.narration.PlayCompleted.subscribe(() => {
-                BloomPlayerCore.setVideoModeIfAppropriate();
+                BloomPlayerCore.setInitialPlaybackMode();
             });
         }
         if (!this.music) {
@@ -695,11 +700,12 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
                 this.resetForNewPageAndPlay(BloomPlayerCore.currentPage!);
             } else {
                 if (
-                    BloomPlayerCore.currentPlaybackMode === PlaybackMode.Video
+                    BloomPlayerCore.currentPlaybackMode ===
+                    PlaybackMode.VideoPaused
                 ) {
-                    this.video.play();
+                    this.video.play(); // sets currentPlaybackMode = VideoPlaying
                 } else {
-                    this.narration.play();
+                    this.narration.play(); // sets currentPlaybackMode = AudioPlaying
                     this.animation.PlayAnimation();
                     this.music.play();
                 }
@@ -861,12 +867,17 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
     }
 
     private pauseAllMultimedia() {
-        if (BloomPlayerCore.currentPlaybackMode === PlaybackMode.Video) {
+        // State must be set after calling pause() methods.
+        if (BloomPlayerCore.currentPlaybackMode === PlaybackMode.VideoPlaying) {
             this.video.pause();
-        } else {
+            BloomPlayerCore.currentPlaybackMode = PlaybackMode.VideoPaused;
+        } else if (
+            BloomPlayerCore.currentPlaybackMode === PlaybackMode.AudioPlaying
+        ) {
             this.narration.pause();
             this.animation.PauseAnimation();
             this.music.pause();
+            BloomPlayerCore.currentPlaybackMode = PlaybackMode.AudioPaused;
         }
     }
 
@@ -1452,7 +1463,7 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
         if (!page) {
             return;
         }
-        BloomPlayerCore.setVideoModeIfAppropriate();
+        BloomPlayerCore.setInitialPlaybackMode();
         if (this.bookInfo.autoAdvance && this.props.landscape) {
             this.swiperInstance.slideNext();
         }
@@ -1494,7 +1505,18 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
             // its continued playing.
             this.video.hidingPage();
             this.video.HandlePageBeforeVisible(bloomPage);
+            this.narration.hidingPage();
             this.music.hidingPage();
+            if (
+                BloomPlayerCore.currentPlaybackMode ===
+                    PlaybackMode.AudioPaused ||
+                BloomPlayerCore.currentPlaybackMode === PlaybackMode.VideoPaused
+            ) {
+                BloomPlayerCore.currentPlaybackMode =
+                    PlaybackMode.NewPageMediaPaused;
+            } else {
+                BloomPlayerCore.currentPlaybackMode = PlaybackMode.NewPage;
+            }
         }
     }
 
@@ -1670,8 +1692,9 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
         if (this.props.paused) {
             return; // shouldn't call when paused
         }
+        // State must be set before calling HandlePageVisible() and related methods.
         if (BloomPlayerCore.currentPageHasVideo) {
-            BloomPlayerCore.currentPlaybackMode = PlaybackMode.Video;
+            BloomPlayerCore.currentPlaybackMode = PlaybackMode.VideoPlaying;
             this.video.HandlePageVisible(bloomPage);
         } else {
             this.playAudioAndAnimation(bloomPage);
@@ -1679,7 +1702,7 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
     }
 
     public playAudioAndAnimation(bloomPage: HTMLElement | undefined) {
-        BloomPlayerCore.currentPlaybackMode = PlaybackMode.Audio;
+        BloomPlayerCore.currentPlaybackMode = PlaybackMode.AudioPlaying;
         if (!bloomPage) return;
         this.narration.setSwiper(this.swiperInstance);
         // When we have computed it, this will raise PageDurationComplete,
@@ -1693,9 +1716,25 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
         this.music.HandlePageVisible(bloomPage);
     }
 
-    public static setVideoModeIfAppropriate() {
+    private static setInitialPlaybackMode() {
         if (BloomPlayerCore.currentPageHasVideo) {
-            BloomPlayerCore.currentPlaybackMode = PlaybackMode.Video; // start over with video for replay
+            if (
+                BloomPlayerCore.currentPlaybackMode ===
+                PlaybackMode.NewPageMediaPaused
+            ) {
+                BloomPlayerCore.currentPlaybackMode = PlaybackMode.VideoPaused;
+            } else {
+                BloomPlayerCore.currentPlaybackMode = PlaybackMode.VideoPlaying;
+            }
+        } else {
+            if (
+                BloomPlayerCore.currentPlaybackMode ===
+                PlaybackMode.NewPageMediaPaused
+            ) {
+                BloomPlayerCore.currentPlaybackMode = PlaybackMode.AudioPaused;
+            } else {
+                BloomPlayerCore.currentPlaybackMode = PlaybackMode.AudioPlaying;
+            }
         }
     }
 }
