@@ -1494,6 +1494,7 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
             // its continued playing.
             this.video.hidingPage();
             this.video.HandlePageBeforeVisible(bloomPage);
+            this.narration.hidingPage();
             this.music.hidingPage();
         }
     }

@@ -710,6 +710,14 @@ export default class Narration {
         if (this.paused) {
             return;
         }
+        this.stopPlaying();
+        this.paused = true;
+        this.startPause = new Date();
+    }
+
+    // This pauses the current player without setting the "paused" state.
+    // (There's no "stop" method on player, only a "pause" method.)
+    private stopPlaying() {
         const player = this.getPlayer();
         if (this.segments && this.segments.length && player) {
             // Before reporting duration, try to check that we really are playing.
@@ -719,8 +727,6 @@ export default class Narration {
             }
             player.pause();
         }
-        this.paused = true;
-        this.startPause = new Date();
     }
 
     public computeDuration(page: HTMLElement): void {
@@ -808,5 +814,9 @@ export default class Narration {
         if (this.PageNarrationComplete) {
             this.PageNarrationComplete.raise(page);
         }
+    }
+
+    public hidingPage() {
+        this.stopPlaying(); // stop the narration without setting the "paused" flag.
     }
 }
