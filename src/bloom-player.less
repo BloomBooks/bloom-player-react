@@ -327,6 +327,18 @@ We just make them follow the main content normally. */
     }
 }
 
+.fade-out {
+    animation: fadeOut ease 1s;
+}
+@keyframes fadeOut {
+    0% {
+        opacity: 1;
+    }
+    100% {
+        opacity: 0.2;
+    }
+}
+
 .bigButtonOverlay {
     position: absolute;
     // Did a lot of fiddling here to try to get the button centered,

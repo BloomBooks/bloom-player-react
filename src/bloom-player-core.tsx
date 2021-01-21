@@ -625,10 +625,16 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
         if (!pageVideoData?.video || !pageVideoData!.page) {
             return; // paranoia, and allows us to assume they are defined without ! everywhere.
         }
+        const parent = pageVideoData.video.parentElement!;
         let replayButton = document.getElementById("replay");
         if (!replayButton) {
             replayButton = document.createElement("div");
             replayButton.setAttribute("id", "replay");
+            replayButton.style.fontSize = "45px";
+            replayButton.style.left = "calc(50% - 22px)";
+            replayButton.style.position = "absolute";
+            replayButton.style.top = "calc(50% - 22px)";
+            replayButton.style.display = "none";
             ReactDOM.render(
                 <Replay
                     style={{ backgroundColor: "rgba(255,255,255,0.5)" }}
@@ -654,14 +660,24 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
                 />,
                 replayButton
             );
-            replayButton.style.position = "absolute";
-            replayButton.style.fontSize = "45px";
-            replayButton.style.left = "calc(50% - 22px)";
-            replayButton.style.top = "calc(50% - 22px)";
-            replayButton.style.cursor = "";
         }
-        pageVideoData.video.parentElement!.appendChild(replayButton);
-        replayButton!.style.display = "block";
+        if (navigator.userAgent.includes("Chrome")) {
+            // due to bug in Chrome, we can't be sure button will show up if we place it over the video
+            // So, instead, we hide the video to make room for it. That can seem a very abrupt change,
+            // so we fade the video out before replacing it with the button.
+            parent.insertBefore(replayButton, pageVideoData.video); // there but still display:none
+            pageVideoData.video.classList.add("fade-out");
+            setTimeout(() => {
+                pageVideoData.video.style.display = "none";
+                replayButton!.style.display = "block";
+                pageVideoData.video.classList.remove("fade-out");
+            }, 1000);
+        } else {
+            // On non-Chrome browsers, it's neater to just overlay the button on top of the video.
+            replayButton.style.position = "absolute";
+            parent.appendChild(replayButton);
+            replayButton!.style.display = "block";
+        }
     }
 
     private initializeMedia() {
@@ -1749,6 +1765,12 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
         const replayButton = document.getElementById("replay");
         if (replayButton) {
             replayButton.style.display = "none";
+            const video = replayButton.parentElement?.getElementsByTagName(
+                "video"
+            )[0];
+            if (video) {
+                video.style.display = "";
+            }
         }
         // State must be set before calling HandlePageVisible() and related methods.
         if (BloomPlayerCore.currentPageHasVideo) {
