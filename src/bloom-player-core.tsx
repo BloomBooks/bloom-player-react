@@ -658,8 +658,9 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
                 replayButton
             );
         }
-        if (navigator.userAgent.includes("Chrome")) {
-            // due to bug in Chrome, we can't be sure button will show up if we place it over the video
+        if (/(safari|chrome)/.test(navigator.userAgent.toLowerCase())) {
+            // due to a bug in Chrome and Safari (and probably other Webkit-based browsers, hopefully
+            // this catches them all), we can't be sure button will show up if we place it over the video
             // So, instead, we hide the video to make room for it. That can seem a very abrupt change,
             // so we fade the video out before replacing it with the button.
             parent.insertBefore(replayButton, pageVideoData.video); // there but still display:none
