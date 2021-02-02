@@ -585,3 +585,12 @@ body,
 *[tabindex]:focus {
     outline: none;
 }
+
+// BL-8900: This is needed for Firefox60/Geckofx60 to get around an wierd bug: a following activity page intrudes itself
+// on the currently displayed page, and then it (and following pages) are displayed offset and joined together until the
+// end of the book.
+// "display:contents;" works as well as what is here, but is even more mystifying.  The explanation of the visibility
+// settings at https://developer.mozilla.org/en-US/docs/Web/CSS/visibility makes at least some plausible sense.
+.swiper-slide-next {
+    visibility: collapse;
+}
