@@ -87,8 +87,14 @@ interface IProps {
         preferredLanguages: string[];
     }) => void;
 
-    // controlsCallback feeds the book's languages up to BloomPlayerControls for the LanguageMenu to use.
-    controlsCallback?: (bookLanguages: LangData[]) => void;
+    // 'controlsCallback' feeds information about the book's contents up to BloomPlayerControls
+    // So far:
+    // - the book's languages for the LanguageMenu to use
+    // - whether the book has image descriptions or not.
+    controlsCallback?: (
+        bookLanguages: LangData[],
+        bookHasImageDescriptions: boolean
+    ) => void;
 
     // Allows the core to inform the controls that we have been forced to pause.
     // We use this when trying to play initially and that playback fails,
@@ -119,6 +125,8 @@ interface IProps {
     outsideButtonPageClass: string;
 
     extraClassNames?: string;
+
+    readImageDescriptions: boolean;
 }
 interface IState {
     pages: string[]; // of the book. First and last are empty in context mode.
@@ -218,6 +226,10 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
     private static currentPageHasVideo: boolean;
 
     public static currentPlaybackMode: PlaybackMode;
+
+    // This is true iff we have image descriptions in the book (somewhere)
+    // and the icon in the controls is active.
+    public static readImageDescriptions: boolean;
 
     private indexOflastNumberedPage: number;
 
@@ -399,6 +411,20 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
                 }
             }
 
+            // If the user changes the image description button on the controlbar
+            if (
+                !this.state.isLoading &&
+                (prevState.isLoading ||
+                    prevProps.readImageDescriptions !==
+                        this.props.readImageDescriptions)
+            ) {
+                if (this.finishUpCalled) {
+                    // We need to reset the page enough to get the narration rebuilt.
+                    this.setIndex(this.state.currentSwiperIndex);
+                    this.showingPage(this.state.currentSwiperIndex);
+                }
+            }
+
             if (
                 this.state.isFinishUpForNewBookComplete &&
                 prevProps.landscape !== this.props.landscape
@@ -556,8 +582,12 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
                     body,
                     this.metaDataObject
                 );
-                // Tell BloomPlayerControls which languages are available for the Language Menu.
-                this.props.controlsCallback(languages);
+                const hasImageDescriptions = doesBookHaveImageDescriptions(
+                    body
+                );
+                // Tell BloomPlayerControls which languages are available for the Language Menu
+                // and whether or not to bother with the readImageDescriptions toggle.
+                this.props.controlsCallback(languages, hasImageDescriptions);
             }
         }
 
@@ -1358,6 +1388,7 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
     }
 
     public render() {
+        BloomPlayerCore.readImageDescriptions = this.props.readImageDescriptions;
         const showNavigationButtonsEvenOnTouchDevices = this.activityManager.getActivityAbsorbsDragging(); // we have to have *some* way of changing the page
         if (this.state.isLoading) {
             return (
@@ -1855,4 +1886,18 @@ function htmlEncode(str: string): string {
     return str.replace("%23", "#").replace(/[\u00A0-\u9999<>\&]/gim, i => {
         return "&#" + i.charCodeAt(0) + ";";
     });
+}
+function doesBookHaveImageDescriptions(body: HTMLBodyElement): boolean {
+    let xpath = "//div[contains(@class, 'bloom-imageDescription')]";
+    xpath +=
+        "/div[contains(@class, 'bloom-editable') and contains(@class, 'bloom-visibility-code-on')]//";
+    xpath += "*[contains(@class, 'audio-sentence')]";
+    const imgDescDivs = body.ownerDocument!.evaluate(
+        xpath,
+        body,
+        null,
+        XPathResult.UNORDERED_NODE_SNAPSHOT_TYPE,
+        null
+    );
+    return imgDescDivs.snapshotLength > 0;
 }

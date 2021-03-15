@@ -28,8 +28,7 @@ import { LocalizationManager } from "./l10n/localizationManager";
 
 // This component is designed to wrap a BloomPlayer with some controls
 // for things like pausing audio and motion, hiding and showing
-// image descriptions. The current version is pretty crude, just enough
-// for testing the BloomPlayer narration functions.
+// image descriptions.
 
 interface IProps {
     // Url of the bloom book (folder). Should be a valid, well-formed URL
@@ -52,6 +51,7 @@ interface IProps {
     // e.g. src/activity-starter/
     locationOfDistFolder: string;
     extraButtons?: IExtraButton[];
+    initiallyReadImageDescriptions: boolean;
 }
 
 // This logic is not straightforward...
@@ -125,6 +125,7 @@ export const BloomPlayerControls: React.FunctionComponent<IProps &
     const [showAppBar, setShowAppBar] = useState<boolean>(
         props.initiallyShowAppBar
     );
+
     // When we're in storybook we won't get a new page when we change the book,
     // so we need to be able to detect that the book changed and thus do new size calculations.
     const [previousUrl, setPreviousUrl] = useState<string>("");
@@ -169,6 +170,13 @@ export const BloomPlayerControls: React.FunctionComponent<IProps &
     const emptyLangDataArray: LangData[] = [];
     const [languageData, setLanguageData] = useState(emptyLangDataArray);
     const [activeLanguageCode, setActiveLanguageCode] = useState("");
+
+    const [readImageDescriptions, setReadImageDescriptions] = useState(
+        props.initiallyReadImageDescriptions
+    );
+    const [bookHasImageDescriptions, setBookHasImageDescriptions] = useState(
+        false
+    );
 
     // the point of this is just to have an ever-increasing number; each time the number
     // is increased, it will cause the useEffect to scale the page to the window again.
@@ -491,8 +499,9 @@ export const BloomPlayerControls: React.FunctionComponent<IProps &
         setActiveLanguageCode(newActiveLanguageCode);
     };
 
-    const updateLanguagesDataWhenOpeningNewBook = (
-        bookLanguages: LangData[]
+    const updateControlsWhenOpeningNewBook = (
+        bookLanguages: LangData[],
+        bookHasImageDescriptions: boolean
     ): void => {
         let languageCode: string;
 
@@ -511,6 +520,7 @@ export const BloomPlayerControls: React.FunctionComponent<IProps &
         }
         setActiveLanguageCode(languageCode);
         setLanguageData(bookLanguages);
+        setBookHasImageDescriptions(bookHasImageDescriptions);
     };
 
     const playString = LocalizationManager.getTranslation(
@@ -587,6 +597,11 @@ export const BloomPlayerControls: React.FunctionComponent<IProps &
                 }
                 canShowFullScreen={!props.hideFullScreenButton}
                 extraButtons={props.extraButtons}
+                bookHasImageDescriptions={bookHasImageDescriptions}
+                readImageDescriptions={readImageDescriptions}
+                onReadImageDescriptionToggled={() =>
+                    setReadImageDescriptions(!readImageDescriptions)
+                }
             />
             <BloomPlayerCore
                 url={props.url}
@@ -607,7 +622,7 @@ export const BloomPlayerControls: React.FunctionComponent<IProps &
                     reportBookProperties(bookPropsObj);
                     setPreferredLanguages(bookProps.preferredLanguages);
                 }}
-                controlsCallback={updateLanguagesDataWhenOpeningNewBook}
+                controlsCallback={updateControlsWhenOpeningNewBook}
                 setForcedPausedCallback={p => {
                     if (p) {
                         setPaused(p);
@@ -652,6 +667,9 @@ export const BloomPlayerControls: React.FunctionComponent<IProps &
                 // We can helpfully reduce flicker if we don't actually show the real content until we
                 // have scaled the player to fit the window. This doesn't hide the loading spinner.
                 extraClassNames={pageScaled ? "" : "hidePlayer"}
+                readImageDescriptions={
+                    bookHasImageDescriptions && readImageDescriptions
+                }
             />
         </div>
     );
@@ -709,6 +727,10 @@ export function InitBloomPlayerControls() {
                     false
                 )}
                 extraButtons={getExtraButtons()}
+                initiallyReadImageDescriptions={getBooleanUrlParam(
+                    "readImageDescriptions",
+                    true
+                )}
             />
         </ThemeProvider>,
         document.getElementById("root")
