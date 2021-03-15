@@ -5,7 +5,10 @@ import { SwiperInstance } from "react-id-swiper";
 
 const kSegmentClass = "bloom-highlightSegment";
 const kMinDuration = 3.0; // seconds
-const kAudioSentence = "audio-sentence"; // Even though these can now encompass more than strict sentences, we continue to use this class name for backwards compatability reasons
+
+// Even though these can now encompass more than strict sentences,
+// we continue to use this class name for backwards compatability reasons.
+const kAudioSentence = "audio-sentence";
 
 // Handles implementation of narration, including playing the audio and
 // highlighting the currently playing text.
@@ -618,6 +621,7 @@ export default class Narration {
     // Querying can optionally be restricted to {container}’s descendants
     // If includeSelf is true, it includes both itself as well as its descendants.
     // Otherwise, it only includes descendants.
+    // Also filters out imageDescriptions if we aren't supposed to be reading them.
     private findAll(
         expr: string,
         container: HTMLElement,
@@ -633,7 +637,11 @@ export default class Narration {
             allMatches.push(container);
         }
 
-        return allMatches;
+        return BloomPlayerCore.readImageDescriptions
+            ? allMatches
+            : allMatches.filter(
+                  match => match.closest(".bloom-imageDescription") === null
+              );
     }
 
     private getPlayableDivs(container: HTMLElement) {

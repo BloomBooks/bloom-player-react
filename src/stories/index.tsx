@@ -96,6 +96,7 @@ function AddBloomPlayerStory(
                 initialLanguageCode={languageCode}
                 useOriginalPageSize={useOriginalPageSize()}
                 extraButtons={extraButtons}
+                initiallyReadImageDescriptions={true}
             />
         );
     });
