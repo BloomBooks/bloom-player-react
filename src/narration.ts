@@ -10,6 +10,8 @@ const kMinDuration = 3.0; // seconds
 // we continue to use this class name for backwards compatability reasons.
 const kAudioSentence = "audio-sentence";
 
+const kImageDescriptionClass = "bloom-imageDescription";
+
 // Handles implementation of narration, including playing the audio and
 // highlighting the currently playing text.
 // Enhance: There's code here to support PageNarrationComplete for auto-advance,
@@ -45,6 +47,11 @@ export default class Narration {
     public PlayCompleted: LiteEvent<HTMLElement>;
     public PlayFailed: LiteEvent<HTMLElement>;
     public PageDuration: number;
+
+    // We want Narration to inform its controllers when we start/stop reading
+    // image descriptions.
+    public StartingImageDescription: LiteEvent<HTMLElement>;
+    public StoppingImageDescription: LiteEvent<HTMLElement>;
 
     // A Session Number that keeps track of each time playAllSentences started.
     // This is used to determine whether the page has been changed or not.
@@ -95,6 +102,9 @@ export default class Narration {
             }
             if (this.PlayCompleted) {
                 this.PlayCompleted.raise();
+            }
+            if (this.StoppingImageDescription) {
+                this.StoppingImageDescription.raise();
             }
             return;
         }
@@ -154,6 +164,19 @@ export default class Narration {
                     // We'll just proceed along, start playing the audio, and playNextSubElement() will return immediately because there are no sub-elements in this case.
                 }
 
+                const currentSegment = element as HTMLElement;
+                if (
+                    currentSegment &&
+                    this.isImageDescriptionSegment(currentSegment) &&
+                    this.StartingImageDescription
+                ) {
+                    this.StartingImageDescription.raise(currentSegment);
+                } else {
+                    if (this.StoppingImageDescription) {
+                        this.StoppingImageDescription.raise();
+                    }
+                }
+
                 const promise = mediaPlayer.play();
                 ++this.currentAudioSessionNum;
                 this.audioPlayCurrentStartTime = new Date().getTime();
@@ -161,6 +184,10 @@ export default class Narration {
                 this.handlePlayPromise(promise);
             }
         }
+    }
+
+    private isImageDescriptionSegment(segment: HTMLElement): boolean {
+        return segment.closest("." + kImageDescriptionClass) !== null;
     }
 
     private handlePlayPromise(promise: Promise<void>) {
@@ -191,7 +218,7 @@ export default class Narration {
                         )
                 ) {
                     // We were getting this error Aug 2020. I tried wrapping the line above which calls mediaPlayer.play()
-                    // (currently `promise = medaiPlayer.play();`) in a setTimeout with 0ms. This seemed to fix the bug (with
+                    // (currently `promise = mediaPlayer.play();`) in a setTimeout with 0ms. This seemed to fix the bug (with
                     // landscape books not having audio play initially -- BL-8887). But the root cause was actually that
                     // we ended up calling playAllSentences twice when the book first loaded.
                     // I fixed that in bloom-player-core. But I wanted to document the possible setTimeout fix here
@@ -407,7 +434,7 @@ export default class Narration {
         const translationGroup = newElement.closest(".bloom-translationGroup");
         if (
             translationGroup &&
-            translationGroup.classList.contains("bloom-imageDescription")
+            translationGroup.classList.contains(kImageDescriptionClass)
         ) {
             const imgContainer = translationGroup.closest(
                 ".bloom-imageContainer"
@@ -555,6 +582,9 @@ export default class Narration {
     }
 
     public playEnded(): void {
+        if (this.StoppingImageDescription) {
+            this.StoppingImageDescription.raise();
+        }
         this.reportPlayDuration();
         if (
             this.elementsToPlayConsecutivelyStack &&
@@ -572,6 +602,9 @@ export default class Narration {
             } else {
                 // Nothing left to play
                 this.reportPlayEnded();
+                if (this.StoppingImageDescription) {
+                    this.StoppingImageDescription.raise;
+                }
             }
         }
     }
@@ -586,6 +619,9 @@ export default class Narration {
         }
         if (this.PlayCompleted) {
             this.PlayCompleted.raise();
+        }
+        if (this.StoppingImageDescription) {
+            this.StoppingImageDescription.raise();
         }
     }
 
@@ -646,7 +682,7 @@ export default class Narration {
         return this.includeImageDescriptions
             ? allMatches
             : allMatches.filter(
-                  match => match.closest(".bloom-imageDescription") === null
+                  match => !this.isImageDescriptionSegment(match)
               );
     }
 

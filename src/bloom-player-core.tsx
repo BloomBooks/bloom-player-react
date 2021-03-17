@@ -127,6 +127,9 @@ interface IProps {
     extraClassNames?: string;
 
     shouldReadImageDescriptions: boolean;
+
+    startImageDescriptionCallback: (currentSegment) => void;
+    stopImageDescriptionCallback: () => void;
 }
 interface IState {
     pages: string[]; // of the book. First and last are empty in context mode.
@@ -768,15 +771,53 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
         // }
     }
 
+    // We need named functions for each LiteEvent handler, so that we can unsubscribe them
+    // when we are about to unmount.
+    private handlePageVideoComplete = pageVideoData => {
+        this.playAudioAndAnimation(pageVideoData!.page); // play audio after video finishes
+        this.showReplayButton(pageVideoData);
+    };
+
+    private handlePageDurationAvailable = (
+        pageElement: HTMLElement | undefined
+    ) => {
+        this.animation.HandlePageDurationAvailable(
+            pageElement!,
+            this.narration.PageDuration
+        );
+    };
+
+    private handlePlayFailed = () => {
+        this.setState({ inPauseForced: true });
+        if (this.props.setForcedPausedCallback) {
+            this.props.setForcedPausedCallback(true);
+        }
+    };
+
+    private handlePlayCompleted = () => {
+        BloomPlayerCore.currentPlaybackMode = PlaybackMode.MediaFinished;
+    };
+
+    private handleStartingImageDescription = (
+        currentSegment: HTMLElement | undefined
+    ) => {
+        this.props.startImageDescriptionCallback(currentSegment);
+    };
+
+    private handleStoppingImageDescription = () => {
+        this.props.stopImageDescriptionCallback();
+    };
+
     private initializeMedia() {
         // The conditionals guarantee that each type of media will only be created once.
+        // N.B. If you add any new LiteEvent subscriptions, don't forget to unsubscribe in
+        // unsubscribeAllEvents().
         if (!this.video) {
             this.video = new Video();
             this.video.PageVideoComplete = new LiteEvent<IPageVideoComplete>();
-            this.video.PageVideoComplete.subscribe(pageVideoData => {
-                this.playAudioAndAnimation(pageVideoData!.page); // play audio after video finishes
-                this.showReplayButton(pageVideoData);
-            });
+            this.video.PageVideoComplete.subscribe(
+                this.handlePageVideoComplete
+            );
         }
         if (!this.narration) {
             this.narration = new Narration();
@@ -784,26 +825,27 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
             this.narration.PageNarrationComplete = new LiteEvent<HTMLElement>();
             this.narration.PlayFailed = new LiteEvent<HTMLElement>();
             this.narration.PlayCompleted = new LiteEvent<HTMLElement>();
+            this.narration.StartingImageDescription = new LiteEvent<
+                HTMLElement
+            >();
+            this.narration.StoppingImageDescription = new LiteEvent<
+                HTMLElement
+            >();
             this.animation = new Animation();
-            this.narration.PageDurationAvailable.subscribe(pageElement => {
-                this.animation.HandlePageDurationAvailable(
-                    pageElement!,
-                    this.narration.PageDuration
-                );
-            });
-            this.narration.PageNarrationComplete.subscribe(pageElement => {
-                this.HandlePageNarrationComplete(pageElement);
-            });
-            this.narration.PlayFailed.subscribe(() => {
-                this.setState({ inPauseForced: true });
-                if (this.props.setForcedPausedCallback) {
-                    this.props.setForcedPausedCallback(true);
-                }
-            });
-            this.narration.PlayCompleted.subscribe(() => {
-                BloomPlayerCore.currentPlaybackMode =
-                    PlaybackMode.MediaFinished;
-            });
+            this.narration.PageDurationAvailable.subscribe(
+                this.handlePageDurationAvailable
+            );
+            this.narration.PageNarrationComplete.subscribe(
+                this.HandlePageNarrationComplete
+            );
+            this.narration.PlayFailed.subscribe(this.handlePlayFailed);
+            this.narration.PlayCompleted.subscribe(this.handlePlayCompleted);
+            this.narration.StartingImageDescription.subscribe(
+                this.handleStartingImageDescription
+            );
+            this.narration.StoppingImageDescription.subscribe(
+                this.handleStoppingImageDescription
+            );
         }
         if (!this.music) {
             this.music = new Music();
@@ -1019,6 +1061,25 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
         this.pauseAllMultimedia();
         document.removeEventListener("keydown", e =>
             this.handleDocumentLevelKeyDown(e)
+        );
+        this.unsubscribeAllEvents();
+    }
+
+    private unsubscribeAllEvents() {
+        this.video.PageVideoComplete.unsubscribe(this.handlePageVideoComplete);
+        this.narration.PageDurationAvailable.unsubscribe(
+            this.handlePageDurationAvailable
+        );
+        this.narration.PageNarrationComplete.unsubscribe(
+            this.HandlePageNarrationComplete
+        );
+        this.narration.PlayFailed.unsubscribe(this.handlePlayFailed);
+        this.narration.PlayCompleted.unsubscribe(this.handlePlayCompleted);
+        this.narration.StartingImageDescription.unsubscribe(
+            this.handleStartingImageDescription
+        );
+        this.narration.StoppingImageDescription.unsubscribe(
+            this.handleStoppingImageDescription
         );
     }
 
@@ -1607,7 +1668,7 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
     }
 
     // What we need to do when the page narration is completed (if autoadvance, go to next page).
-    public HandlePageNarrationComplete(page: HTMLElement | undefined) {
+    public HandlePageNarrationComplete = (page: HTMLElement | undefined) => {
         // When we run this in Bloom, these variables are all present and accounted for and accurate.
         // When it's run in Storybook, not so much.
         if (!page) {
@@ -1618,7 +1679,7 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
         if (this.bookInfo.autoAdvance && this.props.landscape) {
             this.swiperInstance.slideNext();
         }
-    }
+    };
 
     // Get a class to apply to a particular slide. This is used to apply the
     // contextPage class to the slides before and after the current one.

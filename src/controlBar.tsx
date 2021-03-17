@@ -37,6 +37,10 @@ import Fullscreen from "@material-ui/icons/Fullscreen";
 import FullscreenExit from "@material-ui/icons/FullscreenExit";
 import { ImageDescriptionIcon } from "./imageDescriptionIcon";
 
+import theme from "./bloomPlayerTheme";
+import { ThemeProvider } from "@material-ui/styles";
+import { createMuiTheme } from "@material-ui/core";
+
 import LanguageMenu from "./languageMenu";
 import LangData from "./langData";
 import { sendMessageToHost } from "./externalContext";
@@ -67,6 +71,7 @@ interface IControlBarProps {
     bookHasImageDescriptions: boolean;
     readImageDescriptions: boolean;
     onReadImageDescriptionToggled: () => void;
+    nowReadingImageDescription: boolean;
 }
 
 export const ControlBar: React.FunctionComponent<IControlBarProps> = props => {
@@ -135,15 +140,31 @@ export const ControlBar: React.FunctionComponent<IControlBarProps> = props => {
         "Ignore Image Descriptions"
     );
 
+    // A modified Mui theme just for the image description icon.
+    // Secondary is the normal bloom red.
+    // Primary is whatever color the icon should be when we are reading an image description.
+    // In this case, I've used bloom-blue.
+    const imageDescIconTheme = createMuiTheme({
+        palette: {
+            primary: { main: "#1d94a4" },
+            secondary: { main: theme.palette.secondary.main }
+        }
+    });
+
     const readImageDescriptionsOrNot: JSX.Element = (
-        <ImageDescriptionIcon
-            titleAccess={
-                props.readImageDescriptions
-                    ? ignoreImageDescriptions
-                    : readImageDescriptions
-            }
-            opacity={props.readImageDescriptions ? 1 : 0.38}
-        />
+        <ThemeProvider theme={imageDescIconTheme}>
+            <ImageDescriptionIcon
+                titleAccess={
+                    props.readImageDescriptions
+                        ? ignoreImageDescriptions
+                        : readImageDescriptions
+                }
+                opacity={props.readImageDescriptions ? 1 : 0.38}
+                color={
+                    props.nowReadingImageDescription ? "primary" : "secondary"
+                }
+            />
+        </ThemeProvider>
     );
 
     const extraButtons = props.extraButtons
