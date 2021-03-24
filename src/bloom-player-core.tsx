@@ -245,6 +245,44 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
         // everything still works (but there could well be some state that we didn't test). So we're leaving
         // it in.
         this.componentDidUpdate(this.props, this.state);
+        setTimeout(() => this.repairFF60Offset(), 2000);
+    }
+
+    private enableFF60Repair = 0;
+
+    // This horrible hack attempts to fix the worst effects of BL-8900. Basically, something inside
+    // a widget iframe sometimes causes the wrapper that holds the whole collection of pages to scroll
+    // over to be out of position. It appears to be related to an unknown bug in FF60. We have not found
+    // any good way to stop it happening, but this basically compensates for it and puts the current page
+    // back where it belongs. Whatever goes wrong seems to happen within a couple of seconds of the
+    // page before the problem one stabilizing (probably, when the widget gets loaded for real as the
+    // 'next page'). To reduce the load on the CPU, we only monitor for it for a couple of seconds.
+    private repairFF60Offset() {
+        let wrapper = document.getElementsByClassName(
+            "swiper-wrapper"
+        )[0] as HTMLElement;
+        let current = document.getElementsByClassName(
+            "swiper-slide-active"
+        )[0] as HTMLElement;
+        if (wrapper && current && this.enableFF60Repair > 0) {
+            let error =
+                wrapper.parentElement!.getBoundingClientRect().left -
+                current.getBoundingClientRect().left;
+            if (Math.abs(error) > 1) {
+                const scale =
+                    wrapper.getBoundingClientRect().width / wrapper.offsetWidth;
+                const paddingPx = wrapper.style.paddingLeft;
+                const padding =
+                    paddingPx.length === 0
+                        ? 0
+                        : parseFloat(
+                              paddingPx.substring(0, paddingPx.length - 2)
+                          );
+                wrapper.style.paddingLeft = padding + error / scale + "px";
+            }
+        }
+        this.enableFF60Repair -= 100;
+        setTimeout(() => this.repairFF60Offset(), 100);
     }
 
     private handleDocumentLevelKeyDown = e => {
@@ -1484,9 +1522,14 @@ export class BloomPlayerCore extends React.Component<IProps, IState> {
                     this.setState({ inPauseForced: false });
 
                     this.showingPage(this.swiperInstance.activeIndex);
+                    this.enableFF60Repair = 2000;
                 },
-                slideChangeTransitionStart: () =>
-                    this.setIndex(this.swiperInstance.activeIndex)
+                slideChangeTransitionStart: () => {
+                    this.enableFF60Repair = 0; // disable
+                    this.setIndex(this.swiperInstance.activeIndex);
+                },
+                sliderMove: () => (this.enableFF60Repair = 0), // disable
+                slideChangeTransitionEnd: () => (this.enableFF60Repair = 2000) // 2s of checking seems to be enough to fix problems
             },
             keyboard: {
                 enabled: true,
