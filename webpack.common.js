@@ -4,7 +4,21 @@ const core = require("./webpack.core.js");
 const merge = require("webpack-merge");
 const CopyPlugin = require("copy-webpack-plugin");
 const HtmlWebpackPlugin = require("html-webpack-plugin");
+const WebpackBeforeBuildPlugin = require("before-build-webpack");
+const fs = require("fs");
+const glob = require("glob");
+const {
+    Translations,
+    TranslationStatus
+} = require("@crowdin/crowdin-api-client");
+const { default: Axios } = require("axios");
+const { EOL } = require("os"); // system specific End Of Line string
+
 var outputDir = "dist";
+
+const kCrowdinApiToken = process.env.bloomCrowdinApiToken;
+const kCrowdinProjectId = 261564;
+const kCrowdinBloomPlayerFileId = 120; // Only one file.  This keeps things simple.
 
 // From Bloom's webpack, it seems this is needed
 // if ever our output directory does not have the same parent as our node_modules. We then
@@ -46,6 +60,35 @@ module.exports = merge(core, {
     },
 
     plugins: [
+        // Combine the messages.json files for the various languages into a single
+        // json file imported by compiling the code.
+        new WebpackBeforeBuildPlugin(function(stats, callback) {
+            // If the system is set up for it, download the current translated messages files.
+            if (kCrowdinApiToken) {
+                fetchUpdatedCrowdinTranslations()
+                    .then(results => {
+                        results.forEach(res => {
+                            SaveCrowdinTranslationFile(
+                                res.config.url,
+                                res.data
+                            );
+                        });
+                    })
+                    .catch(err => {
+                        console.log(
+                            "Error fetching translated messages: " + err
+                        );
+                    })
+                    .finally(() => {
+                        CombineTranslatedMessagesFiles();
+                        callback(); // don't call it if you do want to stop compilation
+                    });
+            } else {
+                // Go with whatever translations we've got already.
+                CombineTranslatedMessagesFiles();
+                callback(); // don't call it if you do want to stop compilation
+            }
+        }),
         // Inserts the script tag for the main JS bundle (in production builds, with a hash
         // in the name) into the template bloomplayer.htm, while copying it to the output.
         new HtmlWebpackPlugin({
@@ -160,3 +203,131 @@ module.exports = merge(core, {
         ]
     }
 });
+
+// Write the given messages file to the proper folder for the language given
+// in the url.
+function SaveCrowdinTranslationFile(url, messagesJson) {
+    // A bit of a hack to get the language tag, but I couldn't think of a better way to get it.
+    const urlRegex = /^http.*\/exported_files\/([^\/]+)\/.*$/;
+    const matchUrl = urlRegex.exec(url);
+    let lang = matchUrl[1];
+    // handle es-ES, pt-PT, ne-NP and others like them.  (zh-CN is an exception to the rule.)
+    const tagRegex = /^([a-z]+)-[A-Z][A-Z]$/;
+    const matchTag = tagRegex.exec(lang);
+    if (matchTag && matchTag[1] !== "zh") lang = matchTag[1];
+
+    const folder = `src/l10n/_locales/${lang}`;
+    if (!fs.existsSync(folder)) fs.mkdirSync(folder, true);
+    const path = `${folder}/messages.json`;
+    console.log("Saving translated messages to " + path);
+    fs.writeFileSync(path, JSON.stringify(messagesJson, null, 2)); // prettified stringification
+}
+
+// Export the translated messages file for the given language, and retrieve
+// the exported file content.
+async function fetchCrowdinData(translationsApi, lang) {
+    const fetchUrl = await translationsApi.exportProjectTranslation(
+        kCrowdinProjectId,
+        {
+            targetLanguageId: lang,
+            fileIds: [kCrowdinBloomPlayerFileId],
+            // REVIEW: should we set exportApprovedOnly: true ?
+            skipUntranslatedStrings: true
+        }
+    );
+    return Axios.get(fetchUrl.data.url);
+}
+
+// Get the current, up to date translated messages files for all the languages
+// that have translations for any of the strings.
+async function fetchUpdatedCrowdinTranslations() {
+    // Get the list of languages that have translations available for our
+    // messages file.
+    let languages = [];
+    try {
+        const translationStatusApi = new TranslationStatus({
+            token: kCrowdinApiToken
+        });
+        const status = await translationStatusApi.getFileProgress(
+            kCrowdinProjectId,
+            kCrowdinBloomPlayerFileId,
+            500
+        );
+        status.data.forEach(language => {
+            // REVIEW: should we check approvalProgress instead?
+            if (language.data.translationProgress > 0) {
+                languages.push(language.data.languageId);
+            }
+        });
+    } catch (err) {
+        console.log(
+            "Error fetching translation status: " +
+                err +
+                " = " +
+                JSON.stringify(err)
+        );
+        // use original set of languages.
+        languages = [
+            "bn",
+            "es-ES",
+            "fr",
+            "hi",
+            "mam",
+            "my",
+            "pbu",
+            "prs",
+            "quc",
+            "zh-CN"
+        ];
+    }
+    // For all the languages we have available, get the messages files containing the
+    // translations.
+    try {
+        const translationsApi = new Translations({
+            token: kCrowdinApiToken
+        });
+
+        // The Crowdin API allows a maximum of 20 simultaneous queries from any one account.
+        // We do 10 at a time to keep safely under that limit.  (and we have 11 translations
+        // already to start with, so this code gets exercised.)
+        while (languages.length > 10) {
+            const langs = [];
+            for (let i = 0; i < 10; ++i) {
+                langs.push(languages.pop());
+            }
+            const partial = langs.map(lang => {
+                return fetchCrowdinData(translationsApi, lang);
+            });
+            const partialResults = await Promise.all(partial);
+            partialResults.forEach(res => {
+                SaveCrowdinTranslationFile(res.config.url, res.data);
+            });
+        }
+        const downloads = languages.map(lang => {
+            return fetchCrowdinData(translationsApi, lang);
+        });
+        return Promise.all(downloads);
+    } catch (err) {
+        console.log("Error in fetchUpdatedCrowdinTranslations: " + err);
+    }
+}
+
+// Read all of the message files from the _locales folder and combine them
+// to form the full messages file organized by language tag.
+function CombineTranslatedMessagesFiles() {
+    const regex = /src\/l10n\/_locales\/(.*)\/messages.json/;
+    glob("src/l10n/_locales/*/messages.json", (error, files) => {
+        let output = "";
+        let langs = [];
+        files.forEach(filename => {
+            const match = regex.exec(filename);
+            const lang = match[1];
+            langs.push(lang);
+            const contents = ` "${lang}": ${fs.readFileSync(filename, "utf8")}`;
+            output =
+                output + (output.length ? "," + EOL : "") + contents.trimEnd();
+        });
+        fs.writeFileSync("src/l10n/l10n-all.json", `{ ${output} }`);
+        console.log(`Combined localizations for ${langs.join(", ")}`);
+    });
+}
