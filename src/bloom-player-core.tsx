@@ -2023,7 +2023,9 @@ function doesBookHaveImageDescriptions(body: HTMLBodyElement): boolean {
     let xpath = "//div[contains(@class, 'bloom-imageDescription')]";
     xpath +=
         "/div[contains(@class, 'bloom-editable') and contains(@class, 'bloom-visibility-code-on')]//";
-    xpath += "*[contains(@class, 'audio-sentence')]";
+    xpath +=
+        "*[contains(@class, 'audio-sentence') or contains(@class, 'bloom-highlightSegment')]";
+    console.log("DEBUG: body=" + body.outerHTML);
     const imgDescDivs = body.ownerDocument!.evaluate(
         xpath,
         body,
