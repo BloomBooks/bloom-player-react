@@ -204,6 +204,10 @@ AddBloomPlayerStory(
     "src/sample-canvas-activity/index.htm"
 );
 AddBloomPlayerStory(
+    "Activity - Test widget-controlled navigation",
+    "src/activities/test-widget-message-activity/index.htm"
+);
+AddBloomPlayerStory(
     "Sign language with talking",
     "src/sign-language-with-talking-book/sign-language-with-talking-book.htm"
 );
@@ -219,5 +223,5 @@ AddBloomPlayerStory(
 );
 AddBloomPlayerStory(
     "Sign Language with sound",
-    "https://s3.amazonaws.com/share.bloomlibrary.org/debug/Is+it+the+End+of+the+World++-+SL/Is+it+the+End+of+the+World++-+SL.htm",
+    "https://s3.amazonaws.com/share.bloomlibrary.org/debug/Is+it+the+End+of+the+World++-+SL/Is+it+the+End+of+the+World++-+SL.htm"
 );

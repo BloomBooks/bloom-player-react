@@ -41,7 +41,7 @@ export class ActivityContext {
         actualPoints: number,
         analyticsCategory: string
     ) {
-        // please leave this log in... if we could  make it only show in storybook, we would
+        // please leave this log in... if we could make it only show in storybook, we would
         console.log(
             `ActivityContext.reportScoreForCurrentPage(<page>, ${possiblePoints}, ${actualPoints},${analyticsCategory})`
         );
@@ -137,5 +137,27 @@ export class ActivityContext {
         this.listeners.forEach(l =>
             l.target.removeEventListener(l.name, l.listener)
         );
+    }
+
+    private sendMessageToPlayer(message: string) {
+        const activityMessage = {
+            messageType: "control",
+            name: message
+        };
+        //console.log(`Sent activity navigation message to Player: ${message}`);
+        const messageJson = JSON.stringify(activityMessage);
+        window.postMessage(messageJson, "*"); // any window may receive
+    }
+
+    public sendHideButtonsMessage() {
+        this.sendMessageToPlayer("hide-buttons");
+    }
+
+    public sendForwardMessage() {
+        this.sendMessageToPlayer("next");
+    }
+
+    public sendBackwardMessage() {
+        this.sendMessageToPlayer("previous");
     }
 }
